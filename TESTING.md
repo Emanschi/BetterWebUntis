@@ -45,7 +45,7 @@ Der Preflight geht durch, aber `Access-Control-Allow-Credentials` fehlt. Damit b
 
 ## 2. Nur gegen Mock-Daten getestet
 
-**Stand nach M7 (Abwesenheiten/Prüfungen/Termine): 186 Tests, alle grün.** `npm test`
+**Stand nach M8 (ICS-Export): 199 Tests, alle grün.** `npm test`
 
 | Bereich | Tests | Grundlage |
 |---|---|---|
@@ -185,6 +185,34 @@ Fehlermeldung, die sich durch Wiederholen nie ändert. Fix in `src/ui/App.tsx`:
 Abwesenheiten mit kontrolliert/nicht-kontrolliert-Badges, Prüfungen mit aufgelöstem
 Fachnamen über mehrere Monate, Sprechstunden korrekt in "Meine Termine". Schüler-Konto
 `mmuster` zeigt bei Abwesenheiten korrekt die Rechte-Fehlermeldung statt eines Absturzes.
+
+### M8 — ICS-Export der Prüfungen (+13 Tests)
+
+| Bereich | Tests | Grundlage |
+|---|---|---|
+| `domain/ics.ts` | 12 | RFC 5545 (VCALENDAR-Rahmen, Escaping, Zeilenfaltung) |
+| Export-Button (Integration) | 1 | echter Blob-Download-Mechanismus, MIME-Type, Inhalt |
+
+**Eigener Bug beim Schreiben gefunden (nicht erst beim Testen):** `'\;'` als
+JavaScript-String-Literal ergibt `';'`, nicht `'\;'` — der Backslash vor einem
+Zeichen ohne definierte Escape-Bedeutung wird von JS stillschweigend verschluckt.
+Die erste Fassung von `escapeText()` hat Semikolons deshalb gar nicht escaped.
+Beim ersten Testlauf hat sich derselbe Fehler in der Test-Assertion wiederholt
+(`'\;'` in der Erwartung war ebenso wirkungslos) — erst der Blick auf die
+tatsächliche Ausgabe (`Fach\; mit...`, korrekt) hat gezeigt, dass die Assertion
+falsch war, nicht der Code. Fix: `'\\;'` in Code und Test.
+
+**Zeitzone (bewusste Entscheidung, keine Doku-Vorgabe):** Die API liefert keine
+Zeitzoneninformation. `DTSTART`/`DTEND` werden deshalb als "floating time" ohne
+`Z`-Suffix und ohne `TZID` geschrieben — Kalenderprogramme interpretieren das als
+Lokalzeit des Geräts, was für eine App mit genau einer österreichischen Schule die
+richtige Annahme ist. `DTSTAMP` (Erstellungszeitpunkt) bleibt UTC, wie RFC 5545 es
+vorschreibt.
+
+**Manuell im Browser verifiziert:** Button erscheint nur, wenn Prüfungen geladen
+sind; Klick löst ohne Konsolenfehler aus (Blob-Erzeugung, Anchor-Click, Revoke —
+Dateiinhalt bereits vollständig durch die automatisierten Tests abgedeckt, da der
+Download-Sandbox der Browser-Automatisierung keine Dateiprüfung erlaubt).
 
 ### Zusätzlich gegen den echten Server verifiziert (ohne Zugangsdaten)
 
