@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { useSessionStore } from '../../state/sessionStore';
 import { api } from '../../api/index';
 import { addWuDays, formatWuDate, toWuDate, wuWeekRange } from '../../api/format';
@@ -7,6 +8,7 @@ import type { ElementType } from '../../api/types';
 import { buildWeekGrid, mergeSubstitutions, type TimetableDay } from '../../domain/timetable';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { ElementPicker } from '../components/ElementPicker';
 import { ErrorState } from '../components/ErrorState';
 import { Spinner } from '../components/Spinner';
 import { TimetableBlockCard } from '../components/TimetableBlockCard';
@@ -35,10 +37,14 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
   const personId = useSessionStore((s) => s.personId);
 
   const [weekStart, setWeekStart] = useState(() => wuWeekRange(toWuDate(new Date())).startDate);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const weekEnd = addWuDays(weekStart, 6);
 
-  const element =
-    elementProp ?? (personType !== undefined && personId !== undefined ? { id: personId, type: personType } : undefined);
+  const ownElement =
+    personType !== undefined && personId !== undefined ? { id: personId, type: personType } : undefined;
+  const element = elementProp ?? ownElement;
+  const isForeignElement =
+    elementProp !== undefined && (elementProp.id !== ownElement?.id || elementProp.type !== ownElement.type);
 
   const query = useQuery({
     queryKey: ['timetable', element, weekStart],
@@ -73,7 +79,14 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold text-fg">{title}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold text-fg">{title}</h1>
+          {isForeignElement && (
+            <Link to="/timetable" className="text-sm text-accent hover:underline">
+              ← Mein Plan
+            </Link>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={() => setWeekStart((w) => addWuDays(w, -7))} aria-label="Vorige Woche">
             ←
@@ -85,8 +98,17 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
           <Button variant="secondary" onClick={() => setWeekStart((w) => addWuDays(w, 7))} aria-label="Nächste Woche">
             →
           </Button>
+          <Button variant="secondary" onClick={() => setPickerOpen((open) => !open)} aria-expanded={pickerOpen}>
+            Anderen Plan ansehen
+          </Button>
         </div>
       </div>
+
+      {pickerOpen && (
+        <Card>
+          <ElementPicker onSelect={() => setPickerOpen(false)} />
+        </Card>
+      )}
 
       {element === undefined && <ErrorState error="Keine Person zum Anzeigen — bitte neu anmelden." />}
       {query.isPending && element !== undefined && <Spinner label="Stundenplan wird geladen…" />}

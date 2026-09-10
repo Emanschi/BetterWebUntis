@@ -15,7 +15,8 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | M3 Mock-Server & Fixtures | ✅ 135 Tests |
 | M4 App-Shell & Login | ✅ 150 Tests |
 | M5 Stundenplan | ✅ 170 Tests |
-| M6–M11 | offen |
+| M6 Elementwechsel | ✅ 178 Tests |
+| M7–M11 | offen |
 
 ## Befehle
 

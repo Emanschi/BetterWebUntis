@@ -45,7 +45,7 @@ Der Preflight geht durch, aber `Access-Control-Allow-Credentials` fehlt. Damit b
 
 ## 2. Nur gegen Mock-Daten getestet
 
-**Stand nach M5 (Stundenplan): 170 Tests, alle grün.** `npm test` `npm test`
+**Stand nach M6 (Elementwechsel): 178 Tests, alle grün.** `npm test`
 
 | Bereich | Tests | Grundlage |
 |---|---|---|
@@ -144,6 +144,24 @@ den echten Server zu beobachten, ob die reale Schule andere Pausenlängen hat.
 Wochenansicht mit allen sechs Randfällen korrekt dargestellt (Entfall durchgestrichen,
 Vertretung/Raumänderung mit ⚠-Hinweis und Farbe, Doppelstunden als ein Block, Prüfungs-Badge),
 responsive Umbruch auf Mobile (eine Spalte), Wochennavigation.
+
+### M6 — Elementwechsel: Klasse/Lehrer/Fach/Raum (+8 Tests)
+
+| Bereich | Tests | Grundlage |
+|---|---|---|
+| `elementRoutes.ts` | 5 | Segment ↔ ElementType Mapping, Rundreise |
+| `ElementPicker` (Integration) | 3 | echter Wechsel-Flow durch die UI gegen MSW |
+
+Neue URL-Struktur `/timetable/:segment/:id` (z. B. `/timetable/klasse/102`,
+`/timetable/lehrer/11`) — `TimetableScreen` bleibt dabei unverändert prop-getrieben
+(`element`-Prop), nur `TimetableRouteScreen` bindet die URL an.
+
+**Manuell im Browser verifiziert:** Picker öffnet mit Klassen-Tab (3AHIF/2BHIF aus
+schoolData.ts), Tab-Wechsel zu Lehrer zeigt alle sechs Lehrer, Filter funktioniert,
+Auswahl navigiert korrekt und aktualisiert Titel + "← Mein Plan"-Link. Anna Schmidts
+Lehrer-Stundenplan zeigt korrekt ihre SEW-Stunden **und** ihre Sprechstunde
+(lstype "oh") mit Badge — bestätigt, dass die Teilfunktion aus IDEEN.md A4 technisch
+trägt.
 
 ### Zusätzlich gegen den echten Server verifiziert (ohne Zugangsdaten)
 
