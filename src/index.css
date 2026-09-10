@@ -1,8 +1,75 @@
 @import "tailwindcss";
 
-/* Dark/Light folgt der Systemeinstellung. Das vollstaendige Token-Set kommt in M4. */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+/*
+ * Design-Tokens: Light zuerst als bare :root, Dark per prefers-color-scheme (System) und
+ * per [data-theme="dark"] (manueller Override), damit beide Wege dieselben Werte treffen.
+ * Siehe state/themeStore.ts für die Logik, die data-theme setzt.
+ */
+@theme {
+  --color-bg: var(--bwu-bg);
+  --color-surface: var(--bwu-surface);
+  --color-surface-hover: var(--bwu-surface-hover);
+  --color-border: var(--bwu-border);
+  --color-fg: var(--bwu-fg);
+  --color-fg-muted: var(--bwu-fg-muted);
+  --color-accent: var(--bwu-accent);
+  --color-accent-fg: var(--bwu-accent-fg);
+  --color-danger: var(--bwu-danger);
+  --color-danger-fg: var(--bwu-danger-fg);
+  --color-cancelled: var(--bwu-cancelled);
+  --color-irregular: var(--bwu-irregular);
+}
 
 :root {
   color-scheme: light dark;
+
+  --bwu-bg: #f7f7f8;
+  --bwu-surface: #ffffff;
+  --bwu-surface-hover: #f1f1f3;
+  --bwu-border: #e3e3e7;
+  --bwu-fg: #17171a;
+  --bwu-fg-muted: #6b6b74;
+  --bwu-accent: #2f6feb;
+  --bwu-accent-fg: #ffffff;
+  --bwu-danger: #dc2626;
+  --bwu-danger-fg: #ffffff;
+  --bwu-cancelled: #9ca3af;
+  --bwu-irregular: #d97706;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bwu-bg: #101014;
+    --bwu-surface: #18181d;
+    --bwu-surface-hover: #202027;
+    --bwu-border: #2b2b33;
+    --bwu-fg: #f2f2f5;
+    --bwu-fg-muted: #9b9ba5;
+    --bwu-accent: #5b8def;
+    --bwu-accent-fg: #0b1220;
+    --bwu-danger: #f87171;
+    --bwu-danger-fg: #1a0a0a;
+    --bwu-cancelled: #6b7280;
+    --bwu-irregular: #fbbf24;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bwu-bg: #101014;
+  --bwu-surface: #18181d;
+  --bwu-surface-hover: #202027;
+  --bwu-border: #2b2b33;
+  --bwu-fg: #f2f2f5;
+  --bwu-fg-muted: #9b9ba5;
+  --bwu-accent: #5b8def;
+  --bwu-accent-fg: #0b1220;
+  --bwu-danger: #f87171;
+  --bwu-danger-fg: #1a0a0a;
+  --bwu-cancelled: #6b7280;
+  --bwu-irregular: #fbbf24;
+}
+
+body {
+  background: var(--bwu-bg);
+  color: var(--bwu-fg);
 }
