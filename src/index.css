@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* Dark/Light folgt der Systemeinstellung. Das vollstaendige Token-Set kommt in M4. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light dark;
+}
