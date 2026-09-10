@@ -45,7 +45,7 @@ Der Preflight geht durch, aber `Access-Control-Allow-Credentials` fehlt. Damit b
 
 ## 2. Nur gegen Mock-Daten getestet
 
-**Stand nach M6 (Elementwechsel): 178 Tests, alle grün.** `npm test`
+**Stand nach M7 (Abwesenheiten/Prüfungen/Termine): 186 Tests, alle grün.** `npm test`
 
 | Bereich | Tests | Grundlage |
 |---|---|---|
@@ -162,6 +162,29 @@ Auswahl navigiert korrekt und aktualisiert Titel + "← Mein Plan"-Link. Anna Sc
 Lehrer-Stundenplan zeigt korrekt ihre SEW-Stunden **und** ihre Sprechstunde
 (lstype "oh") mit Badge — bestätigt, dass die Teilfunktion aus IDEEN.md A4 technisch
 trägt.
+
+### M7 — Abwesenheiten, Prüfungen, Meine Termine (+8 Tests)
+
+| Bereich | Tests | Grundlage |
+|---|---|---|
+| `domain/timetable.ts` — `appointmentPeriods` | 3 | Filter auf lstype oh/sb/bs, Sortierung |
+| Screen-Integration (AbsencesScreen/ExamsScreen/AppointmentsScreen) | 5 | echte Anfragen gegen MSW, beide Konten |
+
+**Echter Bug gefunden und behoben (kein reines Test-Problem):** Der App-weite
+`QueryClient` hatte `retry: 1` ohne Rücksicht auf die Fehlerart. Bei einem
+Rechte-Fehler (z. B. Schüler-Konto ruft `getTimetableWithAbsences` auf) wartete
+React Query vor der Fehleranzeige erst den vollen Retry mit Backoff-Delay ab (~1s) —
+und wiederholte dabei eine Anfrage, die garantiert wieder denselben Fehler liefert.
+Sichtbar wurde das zuerst als hängender Test (Spinner blieb sichtbar), tatsächlich
+betraf es aber jeden Nutzer mit fehlenden Rechten: unnötige Verzögerung vor einer
+Fehlermeldung, die sich durch Wiederholen nie ändert. Fix in `src/ui/App.tsx`:
+`retry` prüft jetzt `isMissingRight`/`isNotAuthenticated`/`isBadCredentials` aus
+`api/errors.ts` und verzichtet für diese Fälle ganz auf einen Retry.
+
+**Manuell im Browser verifiziert** (Lehrer-Konto `aschmidt`, breite Rechte):
+Abwesenheiten mit kontrolliert/nicht-kontrolliert-Badges, Prüfungen mit aufgelöstem
+Fachnamen über mehrere Monate, Sprechstunden korrekt in "Meine Termine". Schüler-Konto
+`mmuster` zeigt bei Abwesenheiten korrekt die Rechte-Fehlermeldung statt eines Absturzes.
 
 ### Zusätzlich gegen den echten Server verifiziert (ohne Zugangsdaten)
 
