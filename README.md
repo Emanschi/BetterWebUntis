@@ -14,7 +14,8 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | M2 API-Layer | ✅ 99 Tests |
 | M3 Mock-Server & Fixtures | ✅ 135 Tests |
 | M4 App-Shell & Login | ✅ 150 Tests |
-| M5–M11 | offen |
+| M5 Stundenplan | ✅ 170 Tests |
+| M6–M11 | offen |
 
 ## Befehle
 
@@ -40,7 +41,7 @@ das Konto überhaupt aufrufen darf. Ergebnisse gehören nach `TESTING.md`.
 
 ```
 src/api/        JSON-RPC-Layer — Typen, Transport, Client, Methoden (nur dokumentierte!)
-src/domain/     Fachlogik: Stundenplan-Merge, Farben, ICS      (ab M5)
+src/domain/     Fachlogik: Wochenraster, Doppelstunden-Merge, Fachfarben, ICS (M8)
 src/ui/         Komponenten, Screens, Routing, AppShell
 src/state/      Zustand-Stores (Theme, Session) — kein Netzzugriff, nur über src/api
 src/mock/       Mock-Server und Fake-Daten — Fake-Schule "Mock-HTL"
