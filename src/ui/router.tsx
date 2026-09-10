@@ -2,6 +2,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { LoginScreen } from './screens/LoginScreen';
 import { TimetableScreen } from './screens/TimetableScreen';
+import { TimetableRouteScreen } from './screens/TimetableRouteScreen';
 import { AbsencesScreen } from './screens/AbsencesScreen';
 import { ExamsScreen } from './screens/ExamsScreen';
 import { AppointmentsScreen } from './screens/AppointmentsScreen';
@@ -20,6 +21,7 @@ export function AppRouter() {
         <Route path="/login" element={<LoginScreen />} />
         <Route element={<AppShell />}>
           <Route path="/timetable" element={<TimetableScreen />} />
+          <Route path="/timetable/:segment/:id" element={<TimetableRouteScreen />} />
           <Route path="/absences" element={<AbsencesScreen />} />
           <Route path="/exams" element={<ExamsScreen />} />
           <Route path="/appointments" element={<AppointmentsScreen />} />
