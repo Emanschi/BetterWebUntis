@@ -45,9 +45,32 @@ Der Preflight geht durch, aber `Access-Control-Allow-Credentials` fehlt. Damit b
 
 ## 2. Nur gegen Mock-Daten getestet
 
-*(wird während der Entwicklung gefüllt — Stand: noch nichts implementiert)*
+**Stand nach M2 (API-Layer): 99 Tests, alle grün.** `npm test`
 
----
+| Bereich | Tests | Grundlage |
+|---|---|---|
+| `format.ts` — YYYYMMDD, HHMM, RRGGBB, Timegrid-Tage | 23 | Werte aus den Doku-Beispielen |
+| `client.ts` — Umschlag, `?school=`, Cookies, Fehler-Mapping, Warteschlange | 24 | Doku Abschnitt 1 + echte Server-Header |
+| `methods.ts` — alle 23 dokumentierten Methoden | 40 | Beispiel-Responses der Doku |
+| `errors.ts` — Codes, Prädikate, deutsche Meldungen | 12 | gemessene Codes + JSON-RPC-2.0-Spec |
+
+Die Fixtures liegen in `src/api/__tests__/fixtures/` und sind wörtlich aus der Doku
+übernommen. Welche Satzfehler der Doku dabei korrigiert wurden und welche inhaltliche
+Abweichung eine Entscheidung erforderte, steht in `src/api/__tests__/fixtures/README.md`.
+
+### Zusätzlich gegen den echten Server verifiziert (ohne Zugangsdaten)
+
+Am 2026-09-10 lief der fertige API-Layer einmal komplett gegen `htlstp.webuntis.com`,
+mit einem absichtlich nicht existierenden Benutzernamen:
+
+```
+Endpunkt: https://htlstp.webuntis.com/WebUntis/jsonrpc.do?school=htlstp
+FEHLGESCHLAGEN: Benutzername oder Passwort ist falsch.
+```
+
+Damit ist die gesamte Kette real bestätigt: `FetchTransport` → echtes HTTPS → echte
+JSON-RPC-Fehlerantwort → `WebUntisRpcError` → `describeError`. Nur der angemeldete Teil
+fehlt noch — dafür braucht es echte Zugangsdaten.
 
 ## 3. Test gegen den echten Server steht noch aus
 

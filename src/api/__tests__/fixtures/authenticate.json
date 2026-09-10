@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ID",
+  "result": {
+    "sessionId": "644AFBF2C1B592B68C6B04938BD26965",
+    "personType": 2,
+    "personId": 17
+  }
+}

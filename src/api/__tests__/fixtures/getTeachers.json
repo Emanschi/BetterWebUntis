@@ -1,0 +1,22 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ID",
+  "result": [
+    {
+      "id": 1,
+      "name": "Bach",
+      "foreName": "Ingeborg",
+      "longName": "Bachmann",
+      "foreColor": "000000",
+      "backColor": "000000"
+    },
+    {
+      "id": 2,
+      "name": "Foss",
+      "foreName": "Dian",
+      "longName": "Fossey",
+      "foreColor": "000000",
+      "backColor": "000000"
+    }
+  ]
+}

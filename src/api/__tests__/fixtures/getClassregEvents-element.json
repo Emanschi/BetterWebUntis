@@ -1,0 +1,16 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-123",
+  "result": [
+    {
+      "studentid": "",
+      "surname": "Tobermory",
+      "forname": "",
+      "date": 20180709,
+      "subject": "",
+      "reason": "",
+      "text": "",
+      "categoryId": 2
+    }
+  ]
+}

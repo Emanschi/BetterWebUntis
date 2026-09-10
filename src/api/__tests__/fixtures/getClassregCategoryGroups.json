@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": [
+    {
+      "id": 1,
+      "name": "group1"
+    },
+    {
+      "id": 2,
+      "name": "group2"
+    }
+  ]
+}

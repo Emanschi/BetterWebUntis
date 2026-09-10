@@ -1,0 +1,16 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ID",
+  "result": [
+    {
+      "id": 1,
+      "name": "A1",
+      "longName": "AAA1"
+    },
+    {
+      "id": 2,
+      "name": "A2",
+      "longName": "AAA2"
+    }
+  ]
+}

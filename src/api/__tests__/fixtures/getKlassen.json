@@ -1,0 +1,23 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ID",
+  "result": [
+    {
+      "id": 71,
+      "name": "1A",
+      "longName": "Klasse 1A",
+      "foreColor": "000000",
+      "backColor": "000000",
+      "did": 2
+    },
+    {
+      "id": 72,
+      "name": "1B",
+      "longName": "Klasse 1B",
+      "foreColor": "000000",
+      "backColor": "000000",
+      "teacher1": 17,
+      "teacher2": 21
+    }
+  ]
+}

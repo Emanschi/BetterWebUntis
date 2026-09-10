@@ -1,0 +1,20 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ID",
+  "result": [
+    {
+      "id": 44,
+      "name": "Natio",
+      "longName": "Nationalfeiertag",
+      "startDate": 20101026,
+      "endDate": 20101026
+    },
+    {
+      "id": 42,
+      "name": "Allerheiligen",
+      "longName": "Allerheiligen",
+      "startDate": 20101101,
+      "endDate": 20101101
+    }
+  ]
+}

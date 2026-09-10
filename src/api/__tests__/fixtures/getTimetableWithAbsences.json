@@ -1,0 +1,24 @@
+{
+  "id": "1",
+  "jsonrpc": "2.0",
+  "result": {
+    "periodsWithAbsences": [
+      {
+        "date": 20150105,
+        "startTime": 800,
+        "endTime": 850,
+        "studentId": "stud01_k01_ext",
+        "subjectId": "subject01_ext",
+        "teacherIds": [
+          "teacher01_ext"
+        ],
+        "studentGroup": "sg01",
+        "absenceReason": "Illness",
+        "absentTime": 50,
+        "user": "admin_ext",
+        "checked": true,
+        "invalid": true
+      }
+    ]
+  }
+}
