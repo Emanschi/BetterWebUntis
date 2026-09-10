@@ -17,7 +17,8 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | M5 Stundenplan | ✅ 170 Tests |
 | M6 Elementwechsel | ✅ 178 Tests |
 | M7 Abwesenheiten/Prüfungen/Termine | ✅ 186 Tests |
-| M8–M11 | offen |
+| M8 ICS-Export | ✅ 199 Tests |
+| M9–M11 | offen |
 
 ## Befehle
 
