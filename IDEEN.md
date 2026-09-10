@@ -70,4 +70,8 @@ Der Proxy hält **keinen** Zustand: er leitet den POST-Body an `jsonrpc.do` weit
 - **Feiertage/Ferien** (`getHolidays`) im Stundenplan als Ganztagsblöcke.
 - **Export des ganzen Stundenplans** als ICS, nicht nur der Prüfungen.
 - **Mehrere Profile** (z. B. eigener Plan + Lieblingsklasse) mit schnellem Wechsel.
+- **Session über Reload hinweg merken** (M4): aktuell rein im Speicher, ein Reload meldet ab
+  (sicherste Grundeinstellung, siehe TESTING.md M4). Eine Wiederherstellung über
+  `sessionStorage` (tab-gebunden, beim Schließen weg) wäre ein vertretbarer Kompromiss
+  zwischen Komfort und Sicherheit — nur nach expliziter Freigabe umsetzen.
 - **PWA-Installation + Push** für Vertretungen (Push braucht wieder einen Server → siehe B2).

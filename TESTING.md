@@ -45,7 +45,7 @@ Der Preflight geht durch, aber `Access-Control-Allow-Credentials` fehlt. Damit b
 
 ## 2. Nur gegen Mock-Daten getestet
 
-**Stand nach M3 (Mock-Server & Fixtures): 135 Tests, alle grün.** `npm test`
+**Stand nach M4 (App-Shell & Login): 150 Tests, alle grün.** `npm test` `npm test`
 
 | Bereich | Tests | Grundlage |
 |---|---|---|
@@ -92,6 +92,25 @@ Zwei Transporte, eine Fachlogik (`src/mock/rpcHandler.ts`):
 **Simplifikation, bewusst nicht nachgebildet:** `getSubstitutions`-Typ `"shift"` (verschobene
 Stunde) hat keinen generierten Testfall — die drei geforderten Kernfälle (Entfall, Vertretung,
 Raumänderung) genügten für den Umfang von M3. Bei Bedarf leicht ergänzbar in `timetable.ts`.
+
+### M4 — App-Shell, Theme, Session-Store, Login (+15 Tests)
+
+| Bereich | Tests | Grundlage |
+|---|---|---|
+| `themeStore` | 4 | Zustandslogik, defensiv gegen fehlendes `document`/`localStorage` |
+| `sessionStore` | 5 | echter Login-Flow gegen MSW (`mmuster`/`test1234` aus M3) |
+| `LoginScreen` (Komponente) | 3 | React Testing Library + MSW, echter Submit-Flow |
+| `App` (Smoke-Test) | 3 | Login → Weiterleitung → Navigation → Logout, Ende-zu-Ende durch die UI |
+
+**Sicherheitsentscheidung:** Die Session lebt nur im Speicher (kein `sessionId` in
+localStorage/sessionStorage) — ein Reload meldet ab. Das ist die sicherste
+Grundeinstellung gemäß Projektauftrag ("nicht im Klartext persistieren, wo
+vermeidbar"). Nur der Schulname wird gemerkt (kein Geheimnis). Siehe
+`src/state/sessionStore.ts`.
+
+**Manuell im Browser verifiziert** (Mock-Server + Dev-Server, Screenshots im
+Session-Verlauf): Login, Theme-Umschaltung Dark→Light, Profilseite mit korrekten
+Session-Daten, Logout — alles wie erwartet.
 
 ### Zusätzlich gegen den echten Server verifiziert (ohne Zugangsdaten)
 
