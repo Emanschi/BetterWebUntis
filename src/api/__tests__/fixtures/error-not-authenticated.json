@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": "probe-2",
+  "error": {
+    "message": "not authenticated",
+    "code": -8520
+  }
+}

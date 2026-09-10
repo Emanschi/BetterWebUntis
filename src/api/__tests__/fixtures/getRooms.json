@@ -1,0 +1,20 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ID",
+  "result": [
+    {
+      "id": 1,
+      "name": "R1A",
+      "longName": "1A",
+      "foreColor": "000000",
+      "backColor": "000000"
+    },
+    {
+      "id": 2,
+      "name": "R1B",
+      "longName": "1B",
+      "foreColor": "000000",
+      "backColor": "000000"
+    }
+  ]
+}

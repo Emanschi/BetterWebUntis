@@ -1,0 +1,52 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-002",
+  "result": {
+    "lstypes": [
+      {
+        "ls": {
+          "foreColor": "000000",
+          "backColor": "ee7f00"
+        }
+      },
+      {
+        "oh": {
+          "foreColor": "e6e3e1",
+          "backColor": "250eee"
+        }
+      },
+      {
+        "sb": {
+          "foreColor": "000000",
+          "backColor": "1feee7"
+        }
+      },
+      {
+        "bs": {
+          "foreColor": "000000",
+          "backColor": "c03b6e"
+        }
+      },
+      {
+        "ex": {
+          "foreColor": "000000",
+          "backColor": "fdc400"
+        }
+      }
+    ],
+    "codes": [
+      {
+        "cancelled": {
+          "foreColor": "000000",
+          "backColor": "b1b3b4"
+        }
+      },
+      {
+        "irregular": {
+          "foreColor": "e3e33b",
+          "backColor": "77649a"
+        }
+      }
+    ]
+  }
+}

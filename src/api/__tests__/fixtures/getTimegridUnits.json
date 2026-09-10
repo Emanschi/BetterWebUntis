@@ -1,0 +1,40 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ID",
+  "result": [
+    {
+      "day": 1,
+      "timeUnits": [
+        {
+          "startTime": 800,
+          "endTime": 850
+        },
+        {
+          "startTime": 855,
+          "endTime": 945
+        },
+        {
+          "startTime": 1000,
+          "endTime": 1050
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "timeUnits": [
+        {
+          "startTime": 800,
+          "endTime": 850
+        },
+        {
+          "startTime": 855,
+          "endTime": 945
+        },
+        {
+          "startTime": 1000,
+          "endTime": 1050
+        }
+      ]
+    }
+  ]
+}

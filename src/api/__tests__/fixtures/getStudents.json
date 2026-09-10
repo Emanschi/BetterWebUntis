@@ -1,0 +1,22 @@
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": [
+    {
+      "id": 1,
+      "key": "1234567",
+      "name": "MüllerAle",
+      "foreName": "Alexander",
+      "longName": "Müller",
+      "gender": "male"
+    },
+    {
+      "id": 2,
+      "key": "7654321",
+      "name": "SchmidAme",
+      "foreName": "Amelie",
+      "longName": "Schmidt",
+      "gender": "female"
+    }
+  ]
+}

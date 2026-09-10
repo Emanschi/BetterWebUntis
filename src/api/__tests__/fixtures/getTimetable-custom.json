@@ -1,0 +1,41 @@
+{
+  "id": "1",
+  "jsonrpc": "2.0",
+  "result": [
+    {
+      "id": 74,
+      "date": 20150515,
+      "startTime": 855,
+      "endTime": 940,
+      "kl": [
+        {
+          "id": 1,
+          "name": "1a",
+          "longname": "Klasse 1a (Gauss)",
+          "externalkey": "1a_ext"
+        }
+      ],
+      "te": [
+        {
+          "id": 7,
+          "name": "Nobel"
+        }
+      ],
+      "su": [
+        {
+          "id": 3
+        }
+      ],
+      "ro": [
+        {
+          "id": 15
+        }
+      ],
+      "statflags": "@",
+      "lsnumber": 700,
+      "lstext": "Sample Lesson Text.",
+      "info": "Sample Period Info as entered in WebUntis",
+      "sg": "Rel_1a"
+    }
+  ]
+}
