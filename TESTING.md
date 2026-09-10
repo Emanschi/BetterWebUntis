@@ -45,7 +45,7 @@ Der Preflight geht durch, aber `Access-Control-Allow-Credentials` fehlt. Damit b
 
 ## 2. Nur gegen Mock-Daten getestet
 
-**Stand nach M2 (API-Layer): 99 Tests, alle grün.** `npm test`
+**Stand nach M3 (Mock-Server & Fixtures): 135 Tests, alle grün.** `npm test`
 
 | Bereich | Tests | Grundlage |
 |---|---|---|
@@ -53,10 +53,45 @@ Der Preflight geht durch, aber `Access-Control-Allow-Credentials` fehlt. Damit b
 | `client.ts` — Umschlag, `?school=`, Cookies, Fehler-Mapping, Warteschlange | 24 | Doku Abschnitt 1 + echte Server-Header |
 | `methods.ts` — alle 23 dokumentierten Methoden | 40 | Beispiel-Responses der Doku |
 | `errors.ts` — Codes, Prädikate, deutsche Meldungen | 12 | gemessene Codes + JSON-RPC-2.0-Spec |
+| `mock/` Format-Compliance — Fake-Daten entsprechen der Doku | 15 | dieselben Validatoren wie für echte Antworten |
+| `mock/` RPC-Handler — Session, Rechte, Randfälle | 14 | Doku + PLAN.md R4 |
+| `mock/` Integration — echter `WebUntisClient` gegen MSW | 7 | derselbe Code-Pfad wie im Dev-Server |
 
 Die Fixtures liegen in `src/api/__tests__/fixtures/` und sind wörtlich aus der Doku
 übernommen. Welche Satzfehler der Doku dabei korrigiert wurden und welche inhaltliche
 Abweichung eine Entscheidung erforderte, steht in `src/api/__tests__/fixtures/README.md`.
+
+### Mock-Server (M3)
+
+Eine vollständige Fake-Schule ("Mock-HTL", Klasse 3AHIF) mit zwei Test-Logins:
+
+| Login | Passwort | Rolle | Fehlende Rechte (Simulation von PLAN.md R4) |
+|---|---|---|---|
+| `mmuster` | `test1234` | Schüler (Max Muster) | `getStudents`, `getTimetableWithAbsences`, `getClassregEvents`, `getClassregCategories`, `getClassregCategoryGroups` |
+| `aschmidt` | `test1234` | Lehrerin (Anna Schmidt) | keine |
+
+Der generierte Stundenplan deckt alle geforderten Randfälle ab, deterministisch über den
+Wochentag definiert (funktioniert für jeden angefragten Zeitraum gleich):
+
+- **Entfall** — Mittwoch, 1. Stunde (`code: "cancelled"`)
+- **Vertretung** — Montag, 6./7. Stunde (`code: "irregular"`, Lehrerwechsel, `orgid` in `getSubstitutions`)
+- **Raumänderung** — Freitag, 3. Stunde (`code: "irregular"`, Raumwechsel, `orgid` in `getSubstitutions`)
+- **Doppelstunde** — Montag 1./2. sowie Donnerstag 6./7. Stunde
+- **Schularbeit/Prüfung** — Donnerstag, 3. Stunde (`lstype: "ex"` + passender `getExams`-Eintrag)
+- **Sprechstunde** — Lehrer-Ansicht, Dienstag (`lstype: "oh"`, ohne Klassenbezug — Annäherung an "Meine Termine", siehe IDEEN.md A4)
+- **Bereitschaft** — Lehrer-Ansicht, Freitag (`lstype: "sb"`)
+- **Ferientag** — an den Terminen aus `getHolidays` werden keine Perioden erzeugt
+
+Zwei Transporte, eine Fachlogik (`src/mock/rpcHandler.ts`):
+
+- `npm run mock` — eigenständiger Node-HTTP-Server unter `/WebUntis/jsonrpc.do` zum manuellen
+  Testen der App ohne echten Server oder Proxy (sendet großzügigere CORS-Header als der echte
+  Server, um lokal ohne Proxy entwickeln zu können — siehe Warnhinweis in `src/mock/server.ts`)
+- `src/mock/msw/` — MSW-Handler für automatisierte Tests, fangen echten `fetch` ab
+
+**Simplifikation, bewusst nicht nachgebildet:** `getSubstitutions`-Typ `"shift"` (verschobene
+Stunde) hat keinen generierten Testfall — die drei geforderten Kernfälle (Entfall, Vertretung,
+Raumänderung) genügten für den Umfang von M3. Bei Bedarf leicht ergänzbar in `timetable.ts`.
 
 ### Zusätzlich gegen den echten Server verifiziert (ohne Zugangsdaten)
 

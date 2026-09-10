@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "smoke": "vite-node scripts/smoke-test.ts"
+    "smoke": "vite-node scripts/smoke-test.ts",
+    "mock": "vite-node scripts/mock-server.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
@@ -24,6 +25,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "msw": "^2.15.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",

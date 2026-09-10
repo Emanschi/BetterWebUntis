@@ -12,7 +12,7 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | M0 Server-Check | ✅ JSON-RPC an der HTL St. Pölten aktiv |
 | M1 Scaffold & Tooling | ✅ |
 | M2 API-Layer | ✅ 99 Tests |
-| M3 Mock-Server & Fixtures | offen |
+| M3 Mock-Server & Fixtures | ✅ 135 Tests |
 | M4–M11 | offen |
 
 ## Befehle
@@ -23,6 +23,7 @@ npm test           # Unit-Tests gegen die Fixtures aus der API-Doku
 npm run typecheck  # TypeScript im strict-Modus
 npm run build      # Produktions-Build
 npm run smoke      # Rauchtest gegen den echten Server (braucht Zugangsdaten)
+npm run mock        # Mock-Server auf localhost:4001 zum manuellen Testen ohne echten Server
 ```
 
 Der Rauchtest liest die Zugangsdaten aus der Umgebung, nie aus einer Datei:
@@ -40,7 +41,7 @@ das Konto überhaupt aufrufen darf. Ergebnisse gehören nach `TESTING.md`.
 src/api/        JSON-RPC-Layer — Typen, Transport, Client, Methoden (nur dokumentierte!)
 src/domain/     Fachlogik: Stundenplan-Merge, Farben, ICS      (ab M5)
 src/ui/         Komponenten und Screens                        (ab M4)
-src/mock/       Mock-Server und Fake-Daten                     (ab M3)
+src/mock/       Mock-Server und Fake-Daten — Fake-Schule "Mock-HTL"
 scripts/        Rauchtest gegen den echten Server
 ```
 
