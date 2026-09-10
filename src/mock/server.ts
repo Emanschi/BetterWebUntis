@@ -81,12 +81,21 @@ export function createMockHttpServer(state: MockServerState = createMockState())
       const outcome = handleRpc(state, sessionId, { id, method, params: call.params });
 
       // Session-Zustand gemäß Vertrag von handleRpc() persistieren (siehe rpcHandler.ts).
+      //
+      // Cookie-Path bewusst "/" statt "/WebUntis" (wie beim echten Server): der Browser
+      // ruft über den Vite-Dev-Proxy "/webuntis/..." (klein) auf, der Proxy schreibt das
+      // erst serverseitig auf "/WebUntis" um — der Browser selbst sieht nie den
+      // umgeschriebenen Pfad. Ein Cookie mit Path=/WebUntis würde dort (Groß/Kleinschreibung,
+      // Pfad-Matching ist case-sensitiv) nie zurückgeschickt, die Session ginge sofort
+      // wieder verloren. Betraf nur den echten Browser über den Proxy — MSW-Tests liefen
+      // trotzdem grün, weil FetchTransport dort selbst Cookies verwaltet statt sich auf
+      // die Browser-Cookie-Jar zu verlassen. Gefunden beim manuellen Test in M5.
       if (outcome.session === null) {
         if (sessionId !== undefined) state.sessions.delete(sessionId);
-        res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/WebUntis; Max-Age=0`);
+        res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; Max-Age=0`);
       } else if (outcome.session !== undefined) {
         state.sessions.set(outcome.session.sessionId, outcome.session);
-        res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${outcome.session.sessionId}; Path=/WebUntis`);
+        res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${outcome.session.sessionId}; Path=/`);
       }
 
       const status = 200; // WebUntis signalisiert Fehler im Body, nicht per HTTP-Status (siehe TESTING.md)

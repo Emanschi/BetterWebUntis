@@ -45,7 +45,7 @@ Der Preflight geht durch, aber `Access-Control-Allow-Credentials` fehlt. Damit b
 
 ## 2. Nur gegen Mock-Daten getestet
 
-**Stand nach M4 (App-Shell & Login): 150 Tests, alle grün.** `npm test` `npm test`
+**Stand nach M5 (Stundenplan): 170 Tests, alle grün.** `npm test` `npm test`
 
 | Bereich | Tests | Grundlage |
 |---|---|---|
@@ -111,6 +111,39 @@ vermeidbar"). Nur der Schulname wird gemerkt (kein Geheimnis). Siehe
 **Manuell im Browser verifiziert** (Mock-Server + Dev-Server, Screenshots im
 Session-Verlauf): Login, Theme-Umschaltung Dark→Light, Profilseite mit korrekten
 Session-Daten, Logout — alles wie erwartet.
+
+### M5 — Stundenplan-Ansicht (+20 Tests)
+
+| Bereich | Tests | Grundlage |
+|---|---|---|
+| `domain/colors.ts` | 5 | API-Farben bevorzugt, deterministischer Fallback |
+| `domain/timetable.ts` | 15 | Wochenraster, Substitutions-Merge, Doppelstunden-Erkennung |
+
+**Echter Bug gefunden und behoben beim manuellen Test im Browser (nicht von den
+automatisierten Tests erfasst):** Der Mock-Server setzte das Session-Cookie mit
+`Path=/WebUntis`. Der Vite-Dev-Proxy ruft `/webuntis` (klein) auf und schreibt das erst
+serverseitig auf `/WebUntis` um — der Browser selbst sieht nie den umgeschriebenen Pfad.
+Damit passte das Cookie-Path-Attribut nie zu dem, was der Browser tatsächlich anfragt
+(Pfad-Matching ist case-sensitiv), und die Session ging nach dem Login sofort wieder
+verloren. Die automatisierten MSW-Tests haben das nicht bemerkt, weil `FetchTransport`
+dort selbst Cookies verwaltet statt sich auf die Browser-Cookie-Jar zu verlassen — der
+Unterschied zwischen "Test simuliert den Netzwerk-Layer" und "echter Browser mit echtem
+Proxy" wurde hier sichtbar. Fix: Cookie-Path auf `/` gesetzt (`src/mock/server.ts`,
+`src/mock/msw/handlers.ts`). **Lehre für M11 (echter Proxy):** dort denselben Path-Bezug
+zwischen Proxy-Pfad und Cookie-Attribut vorab prüfen.
+
+**Bewusste Heuristik, keine Doku-Vorgabe:** Zwei Perioden gelten als "Doppelstunde" (werden
+optisch zu einem Block zusammengefasst), wenn zwischen ihnen höchstens 15 Minuten liegen
+UND Fach/Lehrer/Raum/Code identisch sind. Die Doku kennt den Begriff "Doppelstunde" nicht;
+selbst echte Doppelstunden haben im Timegrid meist die normale kurze Pause dazwischen
+(nie exakt 0 Minuten). 15 Minuten deckt kurze Pausen ab, bleibt aber unter einer
+Mittagspause. Schwellenwert dokumentiert in `domain/timetable.ts`, beim Smoke-Test gegen
+den echten Server zu beobachten, ob die reale Schule andere Pausenlängen hat.
+
+**Manuell im Browser verifiziert** (Mock-Server + Dev-Server, Light/Dark, Desktop/Mobile):
+Wochenansicht mit allen sechs Randfällen korrekt dargestellt (Entfall durchgestrichen,
+Vertretung/Raumänderung mit ⚠-Hinweis und Farbe, Doppelstunden als ein Block, Prüfungs-Badge),
+responsive Umbruch auf Mobile (eine Spalte), Wochennavigation.
 
 ### Zusätzlich gegen den echten Server verifiziert (ohne Zugangsdaten)
 

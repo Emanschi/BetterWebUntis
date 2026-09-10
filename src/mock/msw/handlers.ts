@@ -42,10 +42,10 @@ export function createMswHandlers(state: MockServerState = createMockState()) {
       const headers = new Headers({ 'Content-Type': 'application/json-rpc;charset=UTF-8' });
       if (outcome.session === null) {
         if (sessionId !== undefined) state.sessions.delete(sessionId);
-        headers.append('Set-Cookie', `${SESSION_COOKIE}=; Path=/WebUntis; Max-Age=0`);
+        headers.append('Set-Cookie', `${SESSION_COOKIE}=; Path=/; Max-Age=0`);
       } else if (outcome.session !== undefined) {
         state.sessions.set(outcome.session.sessionId, outcome.session);
-        headers.append('Set-Cookie', `${SESSION_COOKIE}=${outcome.session.sessionId}; Path=/WebUntis`);
+        headers.append('Set-Cookie', `${SESSION_COOKIE}=${outcome.session.sessionId}; Path=/`);
       }
 
       return HttpResponse.json(outcome.envelope, { headers });
