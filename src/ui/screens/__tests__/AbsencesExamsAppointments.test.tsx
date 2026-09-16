@@ -59,15 +59,26 @@ describe('Abwesenheiten (M7)', () => {
 
 describe('Prüfungen (M7)', () => {
   it('zeigt Pruefungen mit aufgeloestem Fachnamen', async () => {
+    // Lehrer-Konto: getExamTypes ist beim echten Schueler-Konto laut Smoke-Test (M10)
+    // NICHT erlaubt — dafuer eigener Test unten.
+    const user = userEvent.setup();
+    render(<App />);
+    await loginAs(user, 'aschmidt', 'test1234');
+
+    await user.click(screen.getByRole('link', { name: 'Prüfungen' }));
+
+    // Die Mock-Pruefung ist "Angewandte Mathematik" (subjectId 5, siehe schoolData.ts).
+    expect((await screen.findAllByText('Angewandte Mathematik')).length).toBeGreaterThan(0);
+  });
+
+  it('Schueler-Konto sieht einen Rechte-Hinweis statt eines Absturzes', async () => {
     const user = userEvent.setup();
     render(<App />);
     await loginAs(user, 'mmuster', 'test1234');
 
     await user.click(screen.getByRole('link', { name: 'Prüfungen' }));
 
-    // Die Mock-Pruefung ist "Angewandte Mathematik" (subjectId 5, siehe schoolData.ts) —
-    // sie wiederholt sich woechentlich im weiten Suchzeitraum, also auf mind. einen Treffer pruefen.
-    expect((await screen.findAllByText('Angewandte Mathematik')).length).toBeGreaterThan(0);
+    expect(await screen.findByRole('alert')).toHaveTextContent('nicht die nötigen Rechte');
   });
 });
 

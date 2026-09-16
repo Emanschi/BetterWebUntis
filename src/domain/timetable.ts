@@ -71,7 +71,27 @@ export interface TimetableBlock {
 
 export interface TimetableDay {
   date: WuDate;
+  /** Reguläre, zeitlich begrenzte Perioden (siehe `ALL_DAY_THRESHOLD_MINUTES`). */
   blocks: TimetableBlock[];
+  /**
+   * Perioden, die (fast) den ganzen Tag überspannen — kommen real vor (z. B. schulweite
+   * Ereignisse), sind in der Doku aber nicht als eigener Typ beschrieben. Getrennt von
+   * `blocks`, damit sie die Zeitachse des Rasters nicht auf 24 Stunden aufblähen und
+   * normale Stunden dadurch winzig würden. Gefunden beim Smoke-Test gegen den echten
+   * Server (M10): ein Eintrag "00:00–23:59, kein Fach, kein Raum, code irregular".
+   */
+  allDayBlocks: TimetableBlock[];
+}
+
+/**
+ * Ab dieser Dauer gilt eine Periode als "ganztägig" statt als reguläre Unterrichtsstunde.
+ * Keine Doku-Vorgabe — eine reale Schulstunde dauert nie annähernd einen ganzen Tag,
+ * 10 Stunden liegt sicher über jeder denkbaren Doppel-/Mehrfachstunde.
+ */
+const ALL_DAY_THRESHOLD_MINUTES = 10 * 60;
+
+function isAllDayBlock(block: Pick<TimetableBlock, 'startTime' | 'endTime'>): boolean {
+  return wuTimeToMinutes(block.endTime) - wuTimeToMinutes(block.startTime) >= ALL_DAY_THRESHOLD_MINUTES;
 }
 
 function toBlock(period: Period): TimetableBlock {
@@ -151,7 +171,11 @@ export function buildWeekGrid(periods: readonly Period[], weekStart: WuDate): Ti
   const days: TimetableDay[] = [];
   for (let i = 0; i < 7; i++) {
     const date = addWuDays(weekStart, i);
-    days.push({ date, blocks: mergeConsecutive(byDate.get(date) ?? []) });
+    const merged = mergeConsecutive(byDate.get(date) ?? []);
+    const blocks: TimetableBlock[] = [];
+    const allDayBlocks: TimetableBlock[] = [];
+    for (const block of merged) (isAllDayBlock(block) ? allDayBlocks : blocks).push(block);
+    days.push({ date, blocks, allDayBlocks });
   }
   return days;
 }

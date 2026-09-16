@@ -41,7 +41,7 @@ Nicht in der Doku. → entfällt.
 **Entscheidung:** Dev über den Vite-Proxy, Produktion über einen zustandslosen PHP-Proxy auf World4you. Android/iOS brauchen ihn nicht (`CapacitorHttp` requestet nativ).
 Der Proxy hält **keinen** Zustand: er leitet den POST-Body an `jsonrpc.do` weiter und reicht `JSESSIONID` in beide Richtungen durch. Keine Datenbank, keine Nutzerverwaltung, keine Logs mit Zugangsdaten.
 
-*Offen:* Randnotiz aus der Doku — der Pfad-Parameter `;jsessionid=…` ist seit WebUntis 2019 abgekündigt. Wäre er an dieser Schule noch aktiv, käme die Web-App ganz ohne Proxy aus. Wird beim Smoke-Test mit echten Zugangsdaten einmal geprüft, aber **nicht** als tragende Lösung eingeplant (deprecated und laut Doku aus Sicherheitsgründen entfernt).
+*Erledigt:* Der Proxy ist nachweislich zwingend — der echte Login-Test (M10, 2026-09-16) zeigte sofort ein Cookie-Path-Problem, das erst durch eine Proxy-Anpassung (Pfad exakt `/WebUntis`, siehe TESTING.md) behoben wurde. Die deprecated `;jsessionid=`-Variante ist damit ohnehin hinfällig, ein Test darauf entfällt.
 
 ### B2 – ICS-Abo-Feed — **entschieden: beides, in dieser Reihenfolge**
 1. **M8 — ICS-Datei-Export** (rein clientseitig, kein Server, keine gespeicherten Zugangsdaten). Prüfungen aus `getExams` je `examTypeId` einsammeln, als `.ics` herunterladen.
@@ -56,6 +56,15 @@ Der Proxy hält **keinen** Zustand: er leitet den POST-Body an `jsonrpc.do` weit
    - Welche PHP-Version läuft auf World4you? Ist `curl`/`openssl` verfügbar?
    - Gibt es Cron? (Ohne Cron wird bei jedem Feed-Abruf live gegen WebUntis authentifiziert — einfacher, aber langsamer und näher am Rate-Limit.)
    - Nur für dich selbst, oder sollen Mitschüler den Feed auch nutzen können? Das ändert das Sicherheitsmodell erheblich.
+
+### B3 – Prüfungen/ICS-Export sind für Schüler-Konten real möglicherweise unbenutzbar — **wichtig für M11**
+*Gemessen am 2026-09-16 (echtes Schüler-Konto, siehe TESTING.md Abschnitt 3):* das Konto hat kein Recht auf `getExamTypes`. Ohne `getExamTypes` gibt es keine `examTypeId` — und ohne die ist `getExams` laut Doku gar nicht aufrufbar (Pflichtparameter). Der Prüfungen-Screen und der ICS-Export (M8) zeigen für dieses Konto also nur die Rechte-Fehlermeldung, nicht die Prüfungen selbst — kein Absturz, aber das Feature ist für diesen Kontotyp faktisch tot.
+
+**Konsequenz für M11 (Kalenderabo):** Der Feed authentifiziert sich mit genau den Zugangsdaten des Nutzers, für den er läuft — hat der eigentliche Nutzer (typischerweise ein Schüler) dasselbe fehlende Recht, würde auch der Feed leer bleiben oder fehlschlagen, unabhängig vom Server-Code. Das ist keine Implementierungsfrage, sondern eine WebUntis-seitige Rechte-Frage.
+
+**Offene Fragen an den Auftraggeber:**
+- Ist das bei deinem Konto an der HTL grundsätzlich so, oder eine Einstellung, die sich ändern lässt (z. B. über die Schule/Admin)?
+- Falls nicht änderbar: soll der Prüfungen-Screen/ICS-Export dann ausgeblendet statt nur mit Fehlermeldung gezeigt werden, sobald `getExamTypes` fehlschlägt? (Aktuell zeigen wir bewusst den Fehler, nicht Verstecken — leichter nachvollziehbar, aber vielleicht nicht das gewünschte Verhalten.)
 
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 

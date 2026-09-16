@@ -74,16 +74,41 @@ describe('WebUntisClient gegen den Mock-Server (echter fetch, echtes Cookie-Hand
   });
 
   it('Vertretungen ueber getSubstitutions passen zu den Randfaellen im Stundenplan', async () => {
+    // Lehrer-Konto: getSubstitutions ist beim echten Schueler-Konto laut Smoke-Test
+    // (M10) NICHT erlaubt (siehe accounts.ts) — dafuer eigener Test unten.
     const client = newClient();
-    await api.authenticate(client, { user: 'mmuster', password: 'test1234' });
+    await api.authenticate(client, { user: 'aschmidt', password: 'test1234' });
 
     const subs = await api.getSubstitutions(client, { startDate: RANGE_START, endDate: RANGE_END, departmentId: 0 });
     expect(subs.map((s) => s.type)).toEqual(expect.arrayContaining(['cancel', 'subst', 'rmchg']));
   });
 
-  it('Pruefungsexport-Kette: getExamTypes -> getExams liefert Ergebnisse', async () => {
+  it('Schueler-Konto: getSubstitutions schlaegt mangels Recht fehl, Stundenplan bleibt trotzdem brauchbar', async () => {
+    // PLAN.md R4/R7: getTimetable (customizable) liefert code/substText bereits direkt,
+    // ein fehlendes Recht auf getSubstitutions darf die Ansicht deshalb nicht kaputt machen.
     const client = newClient();
-    await api.authenticate(client, { user: 'mmuster', password: 'test1234' });
+    const session = await api.authenticate(client, { user: 'mmuster', password: 'test1234' });
+
+    const error = await api
+      .getSubstitutions(client, { startDate: RANGE_START, endDate: RANGE_END, departmentId: 0 })
+      .catch((e: unknown) => e);
+    expect(isMissingRight(error)).toBe(true);
+
+    const periods = await api.getTimetableCustom(client, {
+      element: { id: session.personId, type: session.personType },
+      startDate: RANGE_START,
+      endDate: RANGE_END,
+      showSubstText: true,
+    });
+    expect(periods.some((p) => p.code === 'cancelled')).toBe(true);
+  });
+
+  it('Pruefungsexport-Kette: getExamTypes -> getExams liefert Ergebnisse', async () => {
+    // Lehrer-Konto: getExamTypes ist beim echten Schueler-Konto laut Smoke-Test (M10)
+    // NICHT erlaubt — Pruefungen/ICS-Export sind fuer Schueler-Konten faktisch nicht
+    // nutzbar, siehe IDEEN.md.
+    const client = newClient();
+    await api.authenticate(client, { user: 'aschmidt', password: 'test1234' });
 
     const examTypes = await api.getExamTypes(client);
     expect(examTypes.length).toBeGreaterThan(0);

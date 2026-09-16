@@ -29,11 +29,14 @@ afterEach(() => {
 
 describe('ICS-Export (M8)', () => {
   it('erzeugt beim Klick auf "Als ICS exportieren" einen text/calendar-Blob-Download', async () => {
+    // Lehrer-Konto: getExamTypes ist beim echten Schueler-Konto laut Smoke-Test (M10)
+    // NICHT erlaubt, der Export-Button erscheint dann gar nicht erst (siehe accounts.ts,
+    // ExamsScreen — der Button wird nur bei erfolgreich geladenen Pruefungen gezeigt).
     const user = userEvent.setup();
     render(<App />);
 
     await user.type(screen.getByLabelText('Schule'), 'mockschule');
-    await user.type(screen.getByLabelText('Benutzername'), 'mmuster');
+    await user.type(screen.getByLabelText('Benutzername'), 'aschmidt');
     await user.type(screen.getByLabelText('Passwort'), 'test1234');
     await user.click(screen.getByRole('button', { name: 'Anmelden' }));
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Stundenplan' })).toBeInTheDocument());

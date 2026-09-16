@@ -111,6 +111,15 @@ const EXAM_TYPE_ID = 1;
  */
 const FIXED_EXAM_DATES: readonly WuDate[] = [20260910, 20261119, 20270128, 20270318, 20270513];
 
+/**
+ * Ein ganztägiger Eintrag ohne Fach/Raum, code "irregular" — nachgebildet nach einem
+ * echten Fund beim Smoke-Test gegen htlstp.webuntis.com (M10): "00:00–23:59, kein Fach,
+ * kein Raum, irregular". Die Doku kennt diesen Fall nicht; wir bilden ihn hier bewusst
+ * nach, damit domain/timetable.ts (allDayBlocks-Trennung) auch gegen den Mock sichtbar
+ * getestet werden kann, nicht nur gegen den echten Server.
+ */
+const ALL_DAY_EVENT_DATE: WuDate = 20260908;
+
 const SLOT_TIMES: Record<number, { startTime: number; endTime: number }> = {
   0: { startTime: 800, endTime: 850 },
   1: { startTime: 855, endTime: 945 },
@@ -235,6 +244,18 @@ function classPeriodsInRange(startDate: WuDate, endDate: WuDate): RawPeriod[] {
       const isExamSlot = slot.edge === 'exam';
       const appliesToday = !isExamSlot || FIXED_EXAM_DATES.includes(date);
       result.push(instantiateSlot(appliesToday ? slot : { ...slot, edge: undefined }, date));
+    }
+    if (date === ALL_DAY_EVENT_DATE) {
+      result.push({
+        id: periodId(date, 9), // 9: außerhalb des Slot-Index-Bereichs (0–6), kollisionsfrei
+        date,
+        startTime: 0,
+        endTime: 2359,
+        klasseId: KLASSE_ID,
+        teacherId: 10,
+        code: 'irregular',
+        substText: 'Schulveranstaltung (ganztägig)',
+      });
     }
   }
   return result;

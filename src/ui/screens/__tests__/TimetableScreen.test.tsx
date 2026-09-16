@@ -83,5 +83,12 @@ describe('TimetableScreen', () => {
     // Der Montags-Block ist als Doppelstunde positioniert (id-Kombination beider Perioden).
     const doubleBlock = document.querySelector('[style*="height"]');
     expect(doubleBlock).not.toBeNull();
+
+    // Ganztägiger Eintrag (M10-Fund gegen den echten Server, siehe mock/timetable.ts
+    // ALL_DAY_EVENT_DATE): erscheint als eigene Zeile ÜBER dem Raster, statt die
+    // Stundenachse auf 24 Stunden aufzublähen.
+    expect(await screen.findByText('Schulveranstaltung (ganztägig)')).toBeInTheDocument();
+    expect(screen.queryByText('23:00')).not.toBeInTheDocument();
+    expect(screen.queryByText('00:00')).not.toBeInTheDocument();
   });
 });
