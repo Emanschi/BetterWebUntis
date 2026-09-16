@@ -54,14 +54,16 @@ export interface SessionState {
 export interface CreateSessionStoreOptions {
   /**
    * Baut den WebUntisClient für eine Login-Anfrage. Standardmäßig über den Proxy-Pfad
-   * (siehe vite.config.ts: `/webuntis` → echter oder Mock-Server, TESTING.md R1).
+   * (siehe vite.config.ts: `/WebUntis` → echter oder Mock-Server, TESTING.md R1).
    * In Tests überschreibbar, um direkt gegen einen MSW-Mock zu sprechen.
    */
   buildClient?: (school: string) => WebUntisClient;
 }
 
 function defaultBuildClient(school: string): WebUntisClient {
-  const proxyBase = (import.meta.env['VITE_WEBUNTIS_PROXY_BASE'] as string | undefined) || '/webuntis';
+  // Pfad exakt "/WebUntis" (Großschreibung) — muss zum Cookie-Path des echten Servers
+  // passen, siehe die ausführliche Begründung in vite.config.ts.
+  const proxyBase = (import.meta.env['VITE_WEBUNTIS_PROXY_BASE'] as string | undefined) || '/WebUntis';
   return createWebUntisClient({ school, proxyBase });
 }
 

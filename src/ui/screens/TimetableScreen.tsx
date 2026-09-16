@@ -22,6 +22,9 @@ import { TimetableBlockCard } from '../components/TimetableBlockCard';
 
 const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr'];
 
+/** Geteilt zwischen der Ganztags-Zeile und dem Zeitraster, damit Spalten exakt fluchten. */
+const GRID_TEMPLATE_COLUMNS = '3.25rem repeat(5, minmax(0, 1fr))';
+
 /** Höhe je Minute im Zeitraster — 2px/Min. ergibt z. B. 90px für eine 45-Minuten-Stunde. */
 const PX_PER_MINUTE = 2;
 
@@ -132,11 +135,42 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
 
       {query.isSuccess && (
         <div className="overflow-x-auto pb-2">
-          <div className="grid min-w-[820px] gap-1.5" style={{ gridTemplateColumns: '3.25rem repeat(5, minmax(0, 1fr))' }}>
-            <TimeAxis bounds={bounds} />
-            {weekDays.map((day, i) => (
-              <DayGridColumn key={day.date} label={WEEKDAY_LABELS[i] ?? ''} day={day} bounds={bounds} />
-            ))}
+          <div className="min-w-[820px]">
+            {weekDays.some((d) => d.allDayBlocks.length > 0) && (
+              // Eigene Zeile für ganztägige Einträge, mit demselben Spaltenraster wie das
+              // Zeitraster darunter — so bleiben die Spalten pixelgenau ausgerichtet, auch
+              // wenn nur ein einzelner Tag so einen Eintrag hat (siehe DayGridColumn).
+              <div
+                className="mb-1.5 grid gap-1.5"
+                style={{ gridTemplateColumns: GRID_TEMPLATE_COLUMNS }}
+                aria-label="Ganztägige Einträge"
+              >
+                <div aria-hidden="true" />
+                {weekDays.map((day) => (
+                  <div key={day.date} className="flex min-w-0 flex-col gap-1">
+                    {day.allDayBlocks.map((block) => {
+                      const text = block.substText ?? block.info ?? block.lstext ?? 'Ganztägiger Eintrag';
+                      return (
+                        <div
+                          key={block.periodIds.join('-')}
+                          title={text}
+                          className="truncate rounded-md border border-border bg-surface-hover px-2 py-1 text-[10px] font-medium text-fg-muted"
+                        >
+                          {text}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: GRID_TEMPLATE_COLUMNS }}>
+              <TimeAxis bounds={bounds} />
+              {weekDays.map((day, i) => (
+                <DayGridColumn key={day.date} label={WEEKDAY_LABELS[i] ?? ''} day={day} bounds={bounds} />
+              ))}
+            </div>
           </div>
         </div>
       )}

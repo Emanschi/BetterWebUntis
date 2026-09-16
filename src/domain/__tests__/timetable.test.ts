@@ -143,6 +143,29 @@ describe('buildWeekGrid', () => {
     const grid = buildWeekGrid(periods, 20260907);
     expect(grid[0]?.blocks[0]).toMatchObject({ code: 'cancelled', info: 'Grund', substText: 'Entfall' });
   });
+
+  it('sortiert ganztaegige Eintraege (>=10h) in allDayBlocks aus, nicht in blocks', () => {
+    // Realer Fund beim Smoke-Test gegen den echten Server (M10): ein Eintrag
+    // "00:00–23:59, kein Fach, kein Raum, code irregular" ohne Entsprechung in der Doku.
+    const periods = [
+      period({ id: 1, date: 20260907, startTime: 0, endTime: 2359, code: 'irregular', su: [], te: [], ro: [] }),
+      period({ id: 2, date: 20260907, startTime: 800, endTime: 850 }),
+    ];
+    const grid = buildWeekGrid(periods, 20260907);
+    expect(grid[0]?.allDayBlocks).toHaveLength(1);
+    expect(grid[0]?.allDayBlocks[0]?.periodIds).toEqual([1]);
+    expect(grid[0]?.blocks).toHaveLength(1);
+    expect(grid[0]?.blocks[0]?.periodIds).toEqual([2]);
+  });
+
+  it('verzerrt computeTimeBounds nicht, wenn ein ganztaegiger Eintrag dabei ist', () => {
+    const periods = [
+      period({ id: 1, date: 20260907, startTime: 0, endTime: 2359, code: 'irregular' }),
+      period({ id: 2, date: 20260907, startTime: 855, endTime: 945 }),
+    ];
+    const grid = buildWeekGrid(periods, 20260907);
+    expect(computeTimeBounds(grid)).toEqual({ startMinutes: 8 * 60, endMinutes: 9 * 60 + 60 }); // 08:00–10:00 (aufgerundet)
+  });
 });
 
 describe('appointmentPeriods', () => {
@@ -175,7 +198,7 @@ describe('appointmentPeriods', () => {
 
 describe('computeTimeBounds', () => {
   it('liefert den Fallback, wenn keine Woche Perioden hat', () => {
-    const bounds = computeTimeBounds([{ date: 20260907, blocks: [] }]);
+    const bounds = computeTimeBounds([{ date: 20260907, blocks: [], allDayBlocks: [] }]);
     expect(bounds).toEqual(DEFAULT_TIME_BOUNDS);
   });
 
@@ -187,6 +210,7 @@ describe('computeTimeBounds', () => {
           { periodIds: [1], date: 20260907, startTime: 855, endTime: 945 }, // 08:55–09:45
           { periodIds: [2], date: 20260907, startTime: 1310, endTime: 1455 }, // 13:10–14:55
         ],
+        allDayBlocks: [],
       },
     ];
     expect(computeTimeBounds(days)).toEqual({ startMinutes: 8 * 60, endMinutes: 15 * 60 });
@@ -194,8 +218,8 @@ describe('computeTimeBounds', () => {
 
   it('spannt ueber mehrere Tage hinweg', () => {
     const days = [
-      { date: 1, blocks: [{ periodIds: [1], date: 1, startTime: 1000, endTime: 1050 }] },
-      { date: 2, blocks: [{ periodIds: [2], date: 2, startTime: 700, endTime: 750 }] },
+      { date: 1, blocks: [{ periodIds: [1], date: 1, startTime: 1000, endTime: 1050 }], allDayBlocks: [] },
+      { date: 2, blocks: [{ periodIds: [2], date: 2, startTime: 700, endTime: 750 }], allDayBlocks: [] },
     ];
     expect(computeTimeBounds(days).startMinutes).toBe(7 * 60);
   });

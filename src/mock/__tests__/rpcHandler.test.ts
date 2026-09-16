@@ -77,6 +77,24 @@ describe('Rechte-Simulation (PLAN.md R4)', () => {
     const out = handleRpc(state, login1.session!.sessionId, { id: '2', method: 'getStudents', params: {} });
     expect('result' in out.envelope).toBe(true);
   });
+
+  // Beide folgenden Faelle sind 1:1 aus dem Smoke-Test gegen den echten Server
+  // uebernommen (siehe TESTING.md, Abschnitt 3) — keine Annahme, sondern Messung.
+  it('Schueler-Konto hat real kein Recht auf getTeachers', () => {
+    const state = createMockState();
+    const login1 = login(state, 'mmuster', 'test1234');
+    const out = handleRpc(state, login1.session!.sessionId, { id: '2', method: 'getTeachers', params: {} });
+    expect('error' in out.envelope).toBe(true);
+    if ('error' in out.envelope) expect(out.envelope.error.code).toBe(WebUntisErrorCode.NO_RIGHT_FOR_METHOD);
+  });
+
+  it('Schueler-Konto hat real kein Recht auf getExamTypes — Pruefungen sind fuer Schueler faktisch nicht abrufbar', () => {
+    const state = createMockState();
+    const login1 = login(state, 'mmuster', 'test1234');
+    const out = handleRpc(state, login1.session!.sessionId, { id: '2', method: 'getExamTypes', params: {} });
+    expect('error' in out.envelope).toBe(true);
+    if ('error' in out.envelope) expect(out.envelope.error.code).toBe(WebUntisErrorCode.NO_RIGHT_FOR_METHOD);
+  });
 });
 
 describe('getTimetable — Randfaelle', () => {
@@ -133,9 +151,11 @@ describe('getTimetable — Randfaelle', () => {
 });
 
 describe('getSubstitutions', () => {
+  // Lehrer-Konto: getSubstitutions ist beim echten Schueler-Konto laut Smoke-Test (M10)
+  // NICHT erlaubt (siehe accounts.ts) — hier bewusst das Konto mit dem Recht verwendet.
   it('liefert Eintraege vom Typ cancel, subst und rmchg', () => {
     const state = createMockState();
-    const login1 = login(state, 'mmuster', 'test1234');
+    const login1 = login(state, 'aschmidt', 'test1234');
     const out = handleRpc(state, login1.session!.sessionId, {
       id: '2',
       method: 'getSubstitutions',
@@ -146,5 +166,17 @@ describe('getSubstitutions', () => {
     expect(types.has('cancel')).toBe(true);
     expect(types.has('subst')).toBe(true);
     expect(types.has('rmchg')).toBe(true);
+  });
+
+  it('Schueler-Konto hat laut echtem Smoke-Test (M10) kein Recht dafuer', () => {
+    const state = createMockState();
+    const login1 = login(state, 'mmuster', 'test1234');
+    const out = handleRpc(state, login1.session!.sessionId, {
+      id: '2',
+      method: 'getSubstitutions',
+      params: { startDate: RANGE_START, endDate: RANGE_END, departmentId: 0 },
+    });
+    expect('error' in out.envelope).toBe(true);
+    if ('error' in out.envelope) expect(out.envelope.error.code).toBe(WebUntisErrorCode.NO_RIGHT_FOR_METHOD);
   });
 });

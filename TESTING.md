@@ -269,14 +269,63 @@ Damit ist die gesamte Kette real bestätigt: `FetchTransport` → echtes HTTPS �
 JSON-RPC-Fehlerantwort → `WebUntisRpcError` → `describeError`. Nur der angemeldete Teil
 fehlt noch — dafür braucht es echte Zugangsdaten.
 
-## 3. Test gegen den echten Server steht noch aus
+## 3. Test gegen den echten Server — ✅ erster Durchlauf erledigt, 2026-09-16
 
-- [ ] `authenticate` mit echten Zugangsdaten → liefert `sessionId`, `personType`, `personId`?
-- [ ] 2FA / App-Secret erforderlich?
-- [ ] `getTimetable` (customizable) für den eigenen Stundenplan — kommen `info`, `substText`, `lstext` wie dokumentiert?
-- [ ] `logout`
-- [ ] Rechte-Check je Methode: `getSubstitutions`, `getStudents`, `getExams`, `getExamTypes`, `getTimetableWithAbsences`, `getClassregEvents`
-- [ ] `getTimetableWithAbsences`: sind `externalkey`s an dieser Schule überhaupt gepflegt?
-- [ ] Liefern Fächer/Klassen echte `foreColor`/`backColor` oder müssen wir die Palette selbst erzeugen?
-- [ ] `getTimegridUnits`: tatsächliches Stundenraster der HTL
-- [ ] Rate-Limit-Verhalten bei mehreren Requests kurz hintereinander
+Smoke-Test (`npm run smoke`) und App im Browser (`npm run dev`, Proxy auf
+`htlstp.webuntis.com`) mit einem echten Schüler-Konto der HTBLuVA St. Pölten,
+vom Nutzer selbst im eigenen Terminal/Browser ausgeführt — Zugangsdaten haben
+diese Session nie erreicht, nur die Diagnose-Ausgabe.
+
+| Punkt | Ergebnis |
+|---|---|
+| `authenticate` mit echten Zugangsdaten | ✅ liefert `sessionId`, `personType: 5` (Schüler), `personId` |
+| 2FA / App-Secret erforderlich? | Nein, für dieses Konto nicht |
+| `getCurrentSchoolyear` | ✅ 2026/2027, 07.09.2026–04.07.2027 |
+| `getTimegridUnits` | ✅ `day`-Werte 2–7 beobachtet (kein 0, kein 1 — Sonntag hat schlicht keine Einheiten). Bestätigt den Doku-Fließtext "1=Sonntag…7=Samstag" als richtige Interpretation gegenüber dem widersprüchlichen Beispiel, siehe `format.ts` |
+| `getTimetable` (customizable) für den eigenen Plan | ✅ 42 Perioden im Wochenzeitraum — inkl. eines nicht dokumentierten Sonderfalls, siehe unten |
+| `logout` | ✅ |
+| Rate-Limit bei mehreren Requests hintereinander | Keine Auffälligkeiten bei den getesteten ~15 Aufrufen |
+
+**Rechte dieses konkreten Schüler-Kontos** (Doku-Rechtespalte lässt offen, was genau
+gilt — das hier ist eine echte Messung, kein Vorabraten mehr):
+
+| Methode | Recht? |
+|---|---|
+| `getKlassen`, `getSubjects`, `getRooms`, `getDepartments`, `getHolidays`, `getStatusData`, `getLatestImportTime` | ✅ ja |
+| `getTeachers` | ❌ nein — **Überraschung**, war bisher im Mock offen angenommen |
+| `getStudents` | ❌ nein (wie erwartet) |
+| `getExamTypes` | ❌ nein — **Überraschung**, macht `getExams`/ICS-Export für dieses Konto faktisch unbenutzbar (siehe IDEEN.md) |
+| `getSubstitutions` | ❌ nein — unkritisch, weil `getTimetable` mit `showSubstText`/`showInfo` dieselben Infos direkt mitliefert (PLAN.md R4) |
+| `getTimetableWithAbsences`, `getClassregCategories` | ❌ nein (wie erwartet) |
+
+`src/mock/accounts.ts` ist entsprechend aktualisiert — das Schüler-Konto im Mock
+spiegelt jetzt exakt diese gemessenen Rechte, nicht mehr eine Annahme.
+
+### Zwei echte Bugs gefunden und behoben
+
+**1. Cookie-Path-Bug, diesmal beim echten Server (derselbe Bug wie M5, aber woanders).**
+Nach dem Login zeigte die App sofort "Die Sitzung ist abgelaufen." Ursache: WebUntis
+setzt `Path=/WebUntis` (Großschreibung, bereits in Abschnitt 1 gemessen). Der Dev-Proxy
+lief bis dahin unter `/webuntis` (klein) und schrieb erst serverseitig auf `/WebUntis`
+um — der Browser sah nie den umgeschriebenen Pfad, das Cookie passte nie zu dem, was
+er tatsächlich anfragte. Betraf **jeden** echten Login über den Proxy, nicht nur den
+Mock-Server. Fix: Proxy-Pfad in `vite.config.ts` und der Default in `sessionStore.ts`
+exakt auf `/WebUntis` (Großschreibung) geändert, keine Pfadumschreibung mehr nötig.
+
+**2. Ganztägiger Eintrag ohne Doku-Entsprechung.** Unter den 42 Perioden war ein
+Eintrag "14.09.2026 00:00–23:59, kein Fach, kein Raum, `code: irregular`" — die Doku
+kennt so einen Fall nicht. Ungefixt hätte das unsere neue Zeitraster-Achse (siehe
+Kalender-Nachbesserung) auf 24 Stunden aufgebläht und echte Stunden winzig gequetscht.
+Fix: `domain/timetable.ts` trennt jetzt Perioden ab 10 Stunden Dauer in ein eigenes
+`allDayBlocks`-Feld, das `TimetableScreen` als eigene Zeile über dem Zeitraster zeigt,
+statt die Stundenachse zu verzerren. Im Mock nachgebildet (`ALL_DAY_EVENT_DATE` in
+`mock/timetable.ts`), damit der Fall auch ohne echten Server sichtbar bleibt.
+**Offen:** was dieser Eintrag inhaltlich darstellt (Schulveranstaltung? Systemeintrag?)
+ist nicht geklärt — nur dass er vorkommt und die UI ihn jetzt nicht mehr kaputt macht.
+
+### Noch offen
+
+- [ ] Test mit einem Lehrer-Konto gegen den echten Server (bisher nur simuliert über `aschmidt` im Mock)
+- [ ] `getTimetableWithAbsences`: sind `externalkey`s an dieser Schule überhaupt gepflegt? (kein Recht zum Prüfen bei diesem Konto)
+- [ ] Liefern Fächer/Klassen echte `foreColor`/`backColor`, oder greift bei dieser Schule durchgehend der generierte Fallback aus `domain/colors.ts`?
+- [ ] Was der ganztägige Eintrag ohne Fach/Raum inhaltlich bedeutet

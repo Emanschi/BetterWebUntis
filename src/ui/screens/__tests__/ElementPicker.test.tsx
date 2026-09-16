@@ -27,10 +27,10 @@ afterEach(() => {
   window.location.hash = '';
 });
 
-async function login(user: ReturnType<typeof userEvent.setup>) {
+async function login(user: ReturnType<typeof userEvent.setup>, name = 'mmuster', password = 'test1234') {
   await user.type(screen.getByLabelText('Schule'), 'mockschule');
-  await user.type(screen.getByLabelText('Benutzername'), 'mmuster');
-  await user.type(screen.getByLabelText('Passwort'), 'test1234');
+  await user.type(screen.getByLabelText('Benutzername'), name);
+  await user.type(screen.getByLabelText('Passwort'), password);
   await user.click(screen.getByRole('button', { name: 'Anmelden' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Stundenplan' })).toBeInTheDocument());
 }
@@ -68,16 +68,29 @@ describe('Elementwechsel (M6)', () => {
   });
 
   it('kann zwischen Klasse/Lehrer/Fach/Raum wechseln und filtern', async () => {
+    // Lehrer-Konto: getTeachers ist beim echten Schueler-Konto laut Smoke-Test (M10)
+    // NICHT erlaubt (siehe accounts.ts) — dafuer eigener Test unten.
     const user = userEvent.setup();
     render(<App />);
-    await login(user);
+    await login(user, 'aschmidt', 'test1234');
     await user.click(screen.getByRole('button', { name: 'Anderen Plan ansehen' }));
 
     await user.click(screen.getByRole('tab', { name: 'Lehrer' }));
-    expect(await screen.findByRole('button', { name: /Schmidt/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Huber/ })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Lehrer suchen'), 'Weber');
     expect(screen.getByRole('button', { name: /Weber/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Schmidt/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Huber/ })).not.toBeInTheDocument();
+  });
+
+  it('Schueler-Konto sieht einen Rechte-Hinweis statt eines Absturzes auf dem Lehrer-Tab', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await login(user); // Default: mmuster (Schueler)
+    await user.click(screen.getByRole('button', { name: 'Anderen Plan ansehen' }));
+
+    await user.click(screen.getByRole('tab', { name: 'Lehrer' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('nicht die nötigen Rechte');
   });
 });

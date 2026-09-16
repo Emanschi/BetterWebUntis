@@ -24,7 +24,7 @@ export interface CreateClientOptions {
   /** Hostname des WebUntis-Servers, z. B. "htlstp.webuntis.com". Nur für direkte Zugriffe nötig. */
   server?: string;
   /**
-   * Proxy-Basispfad für den Browser, z. B. "/webuntis" im Dev oder die World4you-URL
+   * Proxy-Basispfad für den Browser, z. B. "/WebUntis" im Dev oder die World4you-URL
    * in Produktion. Ist er gesetzt, wird nicht direkt gegen WebUntis gesprochen.
    */
   proxyBase?: string;

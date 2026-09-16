@@ -22,11 +22,17 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
-        '/webuntis': {
+        // Pfad bewusst exakt "/WebUntis" (Großschreibung wie beim echten Server), OHNE
+        // Umschreibung: WebUntis setzt das Session-Cookie mit "Path=/WebUntis" (gemessen,
+        // siehe TESTING.md). Pfad-Matching für Cookies ist case-sensitiv — ein Proxy-Pfad
+        // wie "/webuntis" (klein), der erst serverseitig umgeschrieben wird, sorgt dafür,
+        // dass der Browser (der nur "/webuntis" sieht) das Cookie nie zurückschickt und
+        // die Session sofort wieder verloren geht. Echter Bug, gefunden beim ersten Login
+        // gegen den echten Server (M10) — hier bewusst vermieden, statt "gefixt".
+        '/WebUntis': {
           target,
           changeOrigin: true,
           secure: true,
-          rewrite: (path) => path.replace(/^\/webuntis/, '/WebUntis'),
         },
       },
     },

@@ -20,7 +20,7 @@ export const SESSION_COOKIE = 'JSESSIONID';
 export interface WebUntisClientOptions {
   /**
    * Vollständige Endpunkt-URL, z. B. `https://htlstp.webuntis.com/WebUntis/jsonrpc.do`
-   * (nativ / Node) oder ein Proxy-Pfad wie `/webuntis/jsonrpc.do` (Browser).
+   * (nativ / Node) oder ein Proxy-Pfad wie `/WebUntis/jsonrpc.do` (Browser).
    */
   endpoint: string;
   /** Schulname für den `?school=`-Parameter, z. B. "htlstp". */
