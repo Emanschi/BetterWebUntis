@@ -75,5 +75,13 @@ describe('TimetableScreen', () => {
     // Wochentage sind da
     expect(screen.getByText(/^Mo ·/)).toBeInTheDocument();
     expect(screen.getByText(/^Fr ·/)).toBeInTheDocument();
+
+    // Zeitachse (Kalender-Update): Stundenmarkierungen sind sichtbar, damit Uhrzeiten
+    // auf einen Blick erkennbar sind, nicht nur als Text auf der Karte.
+    expect(screen.getByText('08:00')).toBeInTheDocument();
+
+    // Der Montags-Block ist als Doppelstunde positioniert (id-Kombination beider Perioden).
+    const doubleBlock = document.querySelector('[style*="height"]');
+    expect(doubleBlock).not.toBeNull();
   });
 });

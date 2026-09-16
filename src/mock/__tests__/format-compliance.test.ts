@@ -165,6 +165,18 @@ describe('Generierte Stundenplandaten entsprechen dem Doku-Format', () => {
     }
   });
 
+  it('Pruefungen wiederholen sich NICHT woechentlich — nur an festen Terminen im Schuljahr', () => {
+    // Regressions-Test: fruehere Fassung generierte jeden Donnerstag eine Schularbeit,
+    // was bei einer Abfrage ueber ein halbes Jahr ~26 identische Eintraege ergab.
+    const wholeSchoolyear = mockExams(1, 20260907, 20270708);
+    expect(wholeSchoolyear.length).toBeLessThanOrEqual(5);
+    expect(wholeSchoolyear.length).toBeGreaterThan(0);
+
+    // Eine einzelne Woche ohne festen Pruefungstermin bleibt pruefungsfrei.
+    const quietWeek = mockExams(1, 20260921, 20260925); // Montag-Freitag, keine der festen Termine
+    expect(quietWeek).toEqual([]);
+  });
+
   it('Abwesenheiten referenzieren nur externe Schluessel, keine internen Ids (Doku Abschnitt 23)', () => {
     const absences = mockAbsences(RANGE_START, RANGE_END);
     expect(absences.length).toBeGreaterThan(0);

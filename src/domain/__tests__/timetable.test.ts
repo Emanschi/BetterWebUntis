@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { appointmentPeriods, buildWeekGrid, mergeSubstitutions } from '../timetable';
+import {
+  appointmentPeriods,
+  buildWeekGrid,
+  computeTimeBounds,
+  DEFAULT_TIME_BOUNDS,
+  mergeSubstitutions,
+  timeBoundsHourMarks,
+} from '../timetable';
 import type { Period, Substitution } from '../../api/types';
 
 function period(overrides: Partial<Period> & Pick<Period, 'id' | 'date' | 'startTime' | 'endTime'>): Period {
@@ -163,5 +170,44 @@ describe('appointmentPeriods', () => {
   it('liefert eine leere Liste, wenn nichts passt', () => {
     const periods = [period({ id: 1, date: 20260907, startTime: 800, endTime: 850 })];
     expect(appointmentPeriods(periods)).toEqual([]);
+  });
+});
+
+describe('computeTimeBounds', () => {
+  it('liefert den Fallback, wenn keine Woche Perioden hat', () => {
+    const bounds = computeTimeBounds([{ date: 20260907, blocks: [] }]);
+    expect(bounds).toEqual(DEFAULT_TIME_BOUNDS);
+  });
+
+  it('rundet auf volle Stunden, ausgehend von der fruehesten/spaetesten Periode', () => {
+    const days = [
+      {
+        date: 20260907,
+        blocks: [
+          { periodIds: [1], date: 20260907, startTime: 855, endTime: 945 }, // 08:55–09:45
+          { periodIds: [2], date: 20260907, startTime: 1310, endTime: 1455 }, // 13:10–14:55
+        ],
+      },
+    ];
+    expect(computeTimeBounds(days)).toEqual({ startMinutes: 8 * 60, endMinutes: 15 * 60 });
+  });
+
+  it('spannt ueber mehrere Tage hinweg', () => {
+    const days = [
+      { date: 1, blocks: [{ periodIds: [1], date: 1, startTime: 1000, endTime: 1050 }] },
+      { date: 2, blocks: [{ periodIds: [2], date: 2, startTime: 700, endTime: 750 }] },
+    ];
+    expect(computeTimeBounds(days).startMinutes).toBe(7 * 60);
+  });
+});
+
+describe('timeBoundsHourMarks', () => {
+  it('erzeugt eine Markierung je volle Stunde, inklusive beider Randwerte', () => {
+    const marks = timeBoundsHourMarks({ startMinutes: 8 * 60, endMinutes: 11 * 60 });
+    expect(marks).toEqual([480, 540, 600, 660]); // 08:00, 09:00, 10:00, 11:00
+  });
+
+  it('liefert genau eine Markierung, wenn Start und Ende gleich sind', () => {
+    expect(timeBoundsHourMarks({ startMinutes: 480, endMinutes: 480 })).toEqual([480]);
   });
 });

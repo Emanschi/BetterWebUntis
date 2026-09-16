@@ -18,6 +18,7 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | M6 Elementwechsel | ✅ 178 Tests |
 | M7 Abwesenheiten/Prüfungen/Termine | ✅ 186 Tests |
 | M8 ICS-Export | ✅ 199 Tests |
+| Kalender-Nachbesserung (Zeitraster, Theme-Toggle) | ✅ 207 Tests |
 | M9–M11 | offen |
 
 ## Befehle

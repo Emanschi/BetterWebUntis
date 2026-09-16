@@ -171,3 +171,40 @@ export function appointmentPeriods(periods: readonly Period[]): Period[] {
     .filter((p) => p.lstype !== undefined && APPOINTMENT_LSTYPES.includes(p.lstype))
     .toSorted((a, b) => a.date - b.date || a.startTime - b.startTime);
 }
+
+// ---------------------------------------------------------------------------
+// Zeitraster (Kalender-Ansicht, M5-Nachbesserung): wie hoch/weit ist die Achse,
+// die ein TimeAxis-/DayGridColumn-Paar in der UI zeichnet. Reine Mathematik ohne
+// React, damit sie unabhängig von der Komponente testbar ist.
+// ---------------------------------------------------------------------------
+
+export interface TimeBounds {
+  /** Minuten seit Mitternacht, an denen die Achse beginnt (auf volle Stunde abgerundet). */
+  startMinutes: number;
+  /** Minuten seit Mitternacht, an denen die Achse endet (auf volle Stunde aufgerundet). */
+  endMinutes: number;
+}
+
+/** Fallback-Rahmen, wenn eine Woche keine einzige Periode hat (sonst gäbe es keine Achse). */
+export const DEFAULT_TIME_BOUNDS: TimeBounds = { startMinutes: 8 * 60, endMinutes: 16 * 60 };
+
+/** Spannt die Zeitachse über die früheste/späteste Periode der übergebenen Tage, auf volle Stunde gerundet. */
+export function computeTimeBounds(days: readonly TimetableDay[]): TimeBounds {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const day of days) {
+    for (const block of day.blocks) {
+      min = Math.min(min, wuTimeToMinutes(block.startTime));
+      max = Math.max(max, wuTimeToMinutes(block.endTime));
+    }
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return DEFAULT_TIME_BOUNDS;
+  return { startMinutes: Math.floor(min / 60) * 60, endMinutes: Math.ceil(max / 60) * 60 };
+}
+
+/** Volle-Stunden-Markierungen innerhalb der Achse, inklusive der Randwerte. */
+export function timeBoundsHourMarks(bounds: TimeBounds): number[] {
+  const marks: number[] = [];
+  for (let m = bounds.startMinutes; m <= bounds.endMinutes; m += 60) marks.push(m);
+  return marks;
+}

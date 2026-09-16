@@ -7,7 +7,8 @@
  *   - Vertretung             (Montag, 6./7. Stunde — code "irregular", Lehrerwechsel)
  *   - Raumänderung           (Freitag, 3. Stunde — code "irregular", Raumwechsel)
  *   - Doppelstunde            (Montag 1./2. sowie Donnerstag 6./7. Stunde)
- *   - Schularbeit (Prüfung)  (Donnerstag, 3. Stunde — lstype "ex" + getExams-Eintrag)
+ *   - Schularbeit (Prüfung)  (5 feste Donnerstags-Termine im Schuljahr, siehe FIXED_EXAM_DATES —
+ *                            lstype "ex" + getExams-Eintrag; NICHT wöchentlich)
  *   - Sprechstunde           (Dienstag, Lehrer-Ansicht — lstype "oh", ohne Klassenbezug)
  *   - Bereitschaft           (Freitag, Lehrer-Ansicht — lstype "sb")
  *   - Ferientag               (siehe HOLIDAYS in schoolData.ts — an dem Tag keine Perioden)
@@ -99,6 +100,16 @@ const SUBSTITUTE_TEACHER_ID = 13;
 const SUBSTITUTE_ROOM_ID = 2;
 /** examTypeId für die generierte Schularbeit — siehe schoolData.EXAM_TYPES. */
 const EXAM_TYPE_ID = 1;
+
+/**
+ * Feste Termine der Schularbeiten in Angewandter Mathematik (Donnerstag, 3. Stunde,
+ * siehe WEEKLY_TEMPLATE) — bewusst NICHT wöchentlich wiederkehrend wie die übrigen
+ * Randfälle, sondern an konkrete Donnerstage im Schuljahr 2026/2027 gebunden. Eine
+ * Schularbeit pro Woche wäre unrealistisch (Rückmeldung: "gefühlt 30 AM Prüfungen"
+ * bei einer Abfrage über ±180 Tage). Fünf Termine über das Schuljahr verteilt, wie
+ * bei echten Schularbeiten üblich.
+ */
+const FIXED_EXAM_DATES: readonly WuDate[] = [20260910, 20261119, 20270128, 20270318, 20270513];
 
 const SLOT_TIMES: Record<number, { startTime: number; endTime: number }> = {
   0: { startTime: 800, endTime: 850 },
@@ -192,14 +203,27 @@ function instantiateSlot(slot: WeeklySlot, date: WuDate): RawPeriod {
         substText: 'Raumänderung',
         info: 'K201 wegen Sanierung gesperrt',
       };
-    case 'exam':
-      return { ...base, lstype: 'ex', lstext: 'Schularbeit', info: 'Angewandte Mathematik — 1. Schularbeit' };
+    case 'exam': {
+      const ordinal = FIXED_EXAM_DATES.indexOf(date) + 1; // 1-basiert, nur fuer feste Termine aufgerufen
+      return {
+        ...base,
+        lstype: 'ex',
+        lstext: 'Schularbeit',
+        info: `Angewandte Mathematik — ${ordinal}. Schularbeit`,
+      };
+    }
     default:
       return base;
   }
 }
 
-/** Alle Perioden der Klasse 3AHIF im angefragten Zeitraum, inkl. der eingebauten Randfälle. */
+/**
+ * Alle Perioden der Klasse 3AHIF im angefragten Zeitraum, inkl. der eingebauten Randfälle.
+ *
+ * Der wöchentliche Donnerstag-Slot mit `edge: 'exam'` im Template wird nur an den Terminen
+ * aus `FIXED_EXAM_DATES` tatsächlich als Schularbeit gerendert — an allen anderen
+ * Donnerstagen findet stattdessen die normale Angewandte-Mathematik-Stunde statt.
+ */
 function classPeriodsInRange(startDate: WuDate, endDate: WuDate): RawPeriod[] {
   const result: RawPeriod[] = [];
   for (const date of eachDate(startDate, endDate)) {
@@ -207,7 +231,10 @@ function classPeriodsInRange(startDate: WuDate, endDate: WuDate): RawPeriod[] {
     const weekday = wuDateToDate(date).getDay();
     if (weekday === 0 || weekday === 6) continue; // Wochenende
     for (const slot of WEEKLY_TEMPLATE) {
-      if (slot.weekday === weekday) result.push(instantiateSlot(slot, date));
+      if (slot.weekday !== weekday) continue;
+      const isExamSlot = slot.edge === 'exam';
+      const appliesToday = !isExamSlot || FIXED_EXAM_DATES.includes(date);
+      result.push(instantiateSlot(appliesToday ? slot : { ...slot, edge: undefined }, date));
     }
   }
   return result;
