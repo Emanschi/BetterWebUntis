@@ -45,7 +45,7 @@ Der Preflight geht durch, aber `Access-Control-Allow-Credentials` fehlt. Damit b
 
 ## 2. Nur gegen Mock-Daten getestet
 
-**Stand nach M8 (ICS-Export): 199 Tests, alle grün.** `npm test`
+**Stand nach der Kalender-Nachbesserung (Zeitachse, realistische Prüfungstermine, Theme-Toggle): 207 Tests, alle grün.** `npm test`
 
 | Bereich | Tests | Grundlage |
 |---|---|---|
@@ -112,7 +112,7 @@ vermeidbar"). Nur der Schulname wird gemerkt (kein Geheimnis). Siehe
 Session-Verlauf): Login, Theme-Umschaltung Dark→Light, Profilseite mit korrekten
 Session-Daten, Logout — alles wie erwartet.
 
-### M5 — Stundenplan-Ansicht (+20 Tests)
+### M5 — Stundenplan-Ansicht (+20 Tests; Zeitraster kam später in einer Nachbesserung dazu, siehe unten)
 
 | Bereich | Tests | Grundlage |
 |---|---|---|
@@ -213,6 +213,47 @@ vorschreibt.
 sind; Klick löst ohne Konsolenfehler aus (Blob-Erzeugung, Anchor-Click, Revoke —
 Dateiinhalt bereits vollständig durch die automatisierten Tests abgedeckt, da der
 Download-Sandbox der Browser-Automatisierung keine Dateiprüfung erlaubt).
+
+### Nachbesserung nach Nutzer-Feedback: Kalender, Prüfungstermine, Theme-Toggle (+8 Tests)
+
+Feedback nach M8: der Stundenplan sollte "genauer sein", Uhrzeiten sollten "leicht
+erkennbar" sein, die Prüfungsliste zeigte unrealistisch viele Einträge ("gefühlt 30 AM
+Prüfungen"), und der Theme-Umschalter sollte nur zwei Icons haben statt drei.
+
+**1. Echtes Zeitraster statt Kartenliste.** `TimetableScreen` zeichnet jetzt eine
+gemeinsame Stunden-Achse (gerundet auf volle Stunde, aus den geladenen Perioden der
+Woche berechnet) und positioniert jede Periode proportional zu Startzeit und Dauer —
+Lücken (Freistunden, Mittagspause) und Überschneidungen sind auf einen Blick sichtbar,
+nicht nur als Text auf der Karte. Die reine Rechenlogik (`computeTimeBounds`,
+`timeBoundsHourMarks`) liegt bewusst in `domain/timetable.ts`, nicht in der Komponente
+— testbar ohne React, PLAN.md-Regel "ui/ redet nie direkt mit dem Netz, domain/ bleibt
+reine Logik" konsequent weitergedacht.
+
+| Bereich | Tests | Grundlage |
+|---|---|---|
+| `domain/timetable.ts` — `computeTimeBounds`/`timeBoundsHourMarks` | 6 | Rundung auf volle Stunde, Mehrtages-Spannen, Randwerte |
+| `TimetableScreen` (erweitert) | +2 Assertions | Stundenachse sichtbar, Doppelstunde weiterhin als ein Block |
+
+**2. Prüfungstermine nicht mehr wöchentlich.** Die vorige Fassung generierte jeden
+Donnerstag eine Schularbeit — bei einer Abfrage über ein halbes Jahr (ExamsScreen)
+ergab das ~26 identische Einträge. Echter Bug, kein Missverständnis: eine Schularbeit
+pro Woche ist in keiner Schule realistisch. Fix: `FIXED_EXAM_DATES` in
+`mock/timetable.ts` bindet die Schularbeit an fünf konkrete Donnerstage im Schuljahr
+2026/2027, alle anderen Donnerstage zeigen die normale Angewandte-Mathematik-Stunde.
+Regressionstest verhindert, dass das wieder passiert.
+
+**3. Theme-Toggle auf zwei Icons reduziert.** Der dritte "System"-Button (💻) verwirrte
+laut Rückmeldung nur. `ThemeToggle` ist jetzt ein einzelner Umschalter (☀️/🌙), der
+zeigt, was gerade aktiv ist, und beim Klick explizit auf das jeweils andere wechselt.
+Der automatische Start nach Systemeinstellung bleibt beim allerersten Laden erhalten
+(siehe `themeStore.ts`) — nur die manuelle Bedienung wurde vereinfacht.
+
+**Manuell im Browser verifiziert** (Mock-Server, Light/Dark, Desktop 900×1400 zum
+Sehen der ganzen Woche auf einmal, Mobile mit horizontalem Scroll): Zeitraster
+positioniert alle Randfälle korrekt (Doppelstunde als ein Block, Entfall/Vertretung/
+Raumänderung an der richtigen Stelle), Prüfungsliste zeigt genau 3 statt ~26 Einträge
+im Standardzeitraum, Theme-Umschalter funktioniert mit einem Klick in beide
+Richtungen.
 
 ### Zusätzlich gegen den echten Server verifiziert (ohne Zugangsdaten)
 
