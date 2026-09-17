@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: '/timetable', label: 'Stundenplan' },
   { to: '/absences', label: 'Abwesenheiten' },
   { to: '/exams', label: 'Prüfungen' },
+  { to: '/settings', label: 'Einstellungen' },
 ];
 
 /** Layout für alle angemeldeten Screens. Leitet unangemeldete Nutzer zum Login um. */

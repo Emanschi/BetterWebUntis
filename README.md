@@ -25,6 +25,7 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | Prüfungen: undokumentierter REST-Endpunkt (getExams/lstype funktionieren real nicht) | ✅ 222 Tests |
 | Abwesenheiten: derselbe Weg, Tab wieder da | ✅ 231 Tests |
 | Elementwechsel: nur noch Klassen (Lehrer/Fach/Raum entfernt) | ✅ 231 Tests |
+| Kalender-Redesign: gefüllte Fach-Karten, Detailansicht, Fachfarben-Einstellungen | ✅ 250 Tests |
 | M9, M11 | offen |
 
 ## Befehle

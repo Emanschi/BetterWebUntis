@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimetableScreen } from '../TimetableScreen';
 import { setupMockWebUntisServer } from '../../../mock/msw/testServer';
@@ -36,7 +38,9 @@ function renderScreen() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <TimetableScreen />
+      <MemoryRouter>
+        <TimetableScreen />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -91,5 +95,64 @@ describe('TimetableScreen', () => {
     expect(await screen.findByText('Schulveranstaltung (ganztägig)')).toBeInTheDocument();
     expect(screen.queryByText('23:00')).not.toBeInTheDocument();
     expect(screen.queryByText('00:00')).not.toBeInTheDocument();
+  });
+
+  it('öffnet beim Klick auf eine Stunde die Detailansicht mit Lehrkraft/Raum/Fach', async () => {
+    // Nutzerwunsch 2026-09-17: Elemente des Stundenplans sollen sich oeffnen lassen, um
+    // laengere Infos zu sehen (siehe TimetableBlockCard.tsx onOpen, PeriodDetail.tsx).
+    const user = userEvent.setup();
+    const { createSessionStore } = await import('../../../state/sessionStore');
+    const testStore = createSessionStore({
+      buildClient: (school) =>
+        new WebUntisClient({
+          endpoint: 'https://mock.local/WebUntis/jsonrpc.do',
+          school,
+          client: 'BetterWebUntis-Test',
+          transport: new FetchTransport({ canSetCookieHeader: true }),
+          minRequestGapMs: 0,
+        }),
+    });
+    await testStore.getState().login('mockschule', 'mmuster', 'test1234');
+    useSessionStore.setState(testStore.getState());
+
+    renderScreen();
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+
+    // Montag, Doppelstunde SEW (siehe mock/timetable.ts WEEKLY_TEMPLATE) — Kurzname auf
+    // der Karte, Langname/Lehrkraft/Raum erst in der Detailansicht.
+    const cards = await screen.findAllByRole('button', { name: /SEW/ });
+    await user.click(cards[0]!);
+
+    expect(screen.getByRole('dialog', { name: 'SEW' })).toBeInTheDocument();
+    expect(screen.getByText('Software Engineering')).toBeInTheDocument();
+    expect(screen.getByText('Schmidt')).toBeInTheDocument();
+    expect(screen.getByText('EDV-Saal 1')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('öffnet auch einen ganztägigen Eintrag per Klick', async () => {
+    const user = userEvent.setup();
+    const { createSessionStore } = await import('../../../state/sessionStore');
+    const testStore = createSessionStore({
+      buildClient: (school) =>
+        new WebUntisClient({
+          endpoint: 'https://mock.local/WebUntis/jsonrpc.do',
+          school,
+          client: 'BetterWebUntis-Test',
+          transport: new FetchTransport({ canSetCookieHeader: true }),
+          minRequestGapMs: 0,
+        }),
+    });
+    await testStore.getState().login('mockschule', 'mmuster', 'test1234');
+    useSessionStore.setState(testStore.getState());
+
+    renderScreen();
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+
+    await user.click(await screen.findByText('Schulveranstaltung (ganztägig)'));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 });

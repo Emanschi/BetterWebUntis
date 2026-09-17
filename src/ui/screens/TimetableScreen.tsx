@@ -11,14 +11,17 @@ import {
   mergeSubstitutions,
   timeBoundsHourMarks,
   type TimeBounds,
+  type TimetableBlock,
   type TimetableDay,
 } from '../../domain/timetable';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { ElementPicker } from '../components/ElementPicker';
 import { ErrorState } from '../components/ErrorState';
+import { Modal } from '../components/Modal';
+import { PeriodDetail } from '../components/PeriodDetail';
 import { Spinner } from '../components/Spinner';
-import { TimetableBlockCard } from '../components/TimetableBlockCard';
+import { blockTitle, TimetableBlockCard } from '../components/TimetableBlockCard';
 
 const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr'];
 
@@ -55,6 +58,7 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
 
   const [weekStart, setWeekStart] = useState(() => wuWeekRange(toWuDate(new Date())).startDate);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [openBlock, setOpenBlock] = useState<TimetableBlock | null>(null);
   const weekEnd = addWuDays(weekStart, 6);
 
   const ownElement =
@@ -151,13 +155,15 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
                     {day.allDayBlocks.map((block) => {
                       const text = block.substText ?? block.info ?? block.lstext ?? 'Ganztägiger Eintrag';
                       return (
-                        <div
+                        <button
                           key={block.periodIds.join('-')}
+                          type="button"
                           title={text}
-                          className="truncate rounded-md border border-border bg-surface-hover px-2 py-1 text-[10px] font-medium text-fg-muted"
+                          onClick={() => setOpenBlock(block)}
+                          className="truncate rounded-md border border-border bg-surface-hover px-2 py-1 text-left text-[10px] font-medium text-fg-muted hover:bg-border"
                         >
                           {text}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -168,11 +174,17 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
             <div className="grid gap-1.5" style={{ gridTemplateColumns: GRID_TEMPLATE_COLUMNS }}>
               <TimeAxis bounds={bounds} />
               {weekDays.map((day, i) => (
-                <DayGridColumn key={day.date} label={WEEKDAY_LABELS[i] ?? ''} day={day} bounds={bounds} />
+                <DayGridColumn key={day.date} label={WEEKDAY_LABELS[i] ?? ''} day={day} bounds={bounds} onOpenBlock={setOpenBlock} />
               ))}
             </div>
           </div>
         </div>
+      )}
+
+      {openBlock !== null && (
+        <Modal title={blockTitle(openBlock)} onClose={() => setOpenBlock(null)}>
+          <PeriodDetail block={openBlock} />
+        </Modal>
       )}
     </div>
   );
@@ -198,7 +210,14 @@ function TimeAxis({ bounds }: { bounds: TimeBounds }) {
   );
 }
 
-function DayGridColumn({ label, day, bounds }: { label: string; day: TimetableDay; bounds: TimeBounds }) {
+interface DayGridColumnProps {
+  label: string;
+  day: TimetableDay;
+  bounds: TimeBounds;
+  onOpenBlock: (block: TimetableBlock) => void;
+}
+
+function DayGridColumn({ label, day, bounds, onOpenBlock }: DayGridColumnProps) {
   const totalMinutes = bounds.endMinutes - bounds.startMinutes;
   return (
     <div className="flex min-w-0 flex-col">
@@ -221,7 +240,7 @@ function DayGridColumn({ label, day, bounds }: { label: string; day: TimetableDa
           );
           return (
             <div key={block.periodIds.join('-')} className="absolute inset-x-0.5" style={{ top, height }}>
-              <TimetableBlockCard block={block} dense />
+              <TimetableBlockCard block={block} dense onOpen={onOpenBlock} />
             </div>
           );
         })}
