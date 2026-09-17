@@ -52,6 +52,14 @@ interface WeeklySlot {
   edge?: Edge;
   /** Demo-Fixture für showBooking/bkText/bkRemark (Doku Abschnitt 15) — unabhängig von `edge`. */
   hasBooking?: boolean;
+  /**
+   * Demo-Fixture für den undokumentierten calendar-entry-detail-Endpunkt (`teachingContent`,
+   * siehe api/calendarEntryRest.ts) — unabhängig von `edge`. Absichtlich eine EINZELNE
+   * Stunde (keine Doppelstunde), weil der echte Endpunkt über die exakte Start-/Endzeit
+   * einer einzelnen Stunde identifiziert, nicht über eine im Stundenplan zusammengefasste
+   * Zeitspanne (siehe calendarEntryRest.ts).
+   */
+  hasTeachingContent?: boolean;
 }
 
 /**
@@ -63,7 +71,7 @@ const WEEKLY_TEMPLATE: WeeklySlot[] = [
   { weekday: 1, slotIndex: 0, subjectId: 4, teacherId: 11, roomId: 1 },
   { weekday: 1, slotIndex: 1, subjectId: 4, teacherId: 11, roomId: 1 },
   { weekday: 1, slotIndex: 2, subjectId: 1, teacherId: 10, roomId: 4 },
-  { weekday: 1, slotIndex: 3, subjectId: 2, teacherId: 13, roomId: 4 },
+  { weekday: 1, slotIndex: 3, subjectId: 2, teacherId: 13, roomId: 4, hasTeachingContent: true },
   { weekday: 1, slotIndex: 5, subjectId: 3, teacherId: 14, roomId: 4, edge: 'substitution' },
   { weekday: 1, slotIndex: 6, subjectId: 3, teacherId: 14, roomId: 4, edge: 'substitution' },
 
@@ -180,6 +188,12 @@ interface RawPeriod {
   bkText?: string;
   bkRemark?: string;
   /**
+   * NUR für die Simulation des undokumentierten calendar-entry-detail-Endpunkts
+   * (`api/calendarEntryRest.ts`) — KEIN Feld, das `getTimetable` liefert. `toCustomPeriod`/
+   * `toSimplePeriod` übernehmen das deshalb bewusst NICHT in `Period`.
+   */
+  teachingContent?: string;
+  /**
    * Nur intern für die `getExams`/`getExamTypes`-Simulation (Doku Abschnitt 21/22) —
    * KEIN Feld, das der echte Server über `getTimetable` liefert. Gemessen am 2026-09-17
    * (siehe TESTING.md): eine echte Prüfungsstunde hatte weder `lstype` noch `code`, nur
@@ -206,6 +220,12 @@ function instantiateSlot(slot: WeeklySlot, date: WuDate): RawPeriod {
     roomId: slot.roomId,
     studentGroup: '3AHIF',
     ...(slot.hasBooking === true ? { bkText: 'Halle 2 reserviert', bkRemark: 'Geräte bitte danach wieder wegräumen' } : {}),
+    ...(slot.hasTeachingContent === true
+      ? {
+          teachingContent:
+            'Diskussionsthemen sammeln\nandere überzeugen: Gurkerl Sommerferien\nReferatstermine und -themen\nBekanntgabe der Beurteilungskriterien',
+        }
+      : {}),
   };
 
   switch (slot.edge) {

@@ -4,7 +4,10 @@ import { Button } from './components/Button';
 import { ThemeToggle } from './components/ThemeToggle';
 
 const NAV_ITEMS = [
-  { to: '/timetable', label: 'Stundenplan' },
+  // "?resetToToday=1": springt beim Klick zurück zu heute, auch wenn man auf /timetable
+  // bereits zu einem anderen Datum navigiert hat (Nutzerwunsch 2026-09-17) — siehe
+  // TimetableScreen.tsx, das den Parameter liest und sofort wieder entfernt.
+  { to: '/timetable?resetToToday=1', label: 'Stundenplan' },
   { to: '/absences', label: 'Abwesenheiten' },
   { to: '/exams', label: 'Prüfungen' },
   { to: '/settings', label: 'Einstellungen' },

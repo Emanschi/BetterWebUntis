@@ -9,18 +9,30 @@ const LSTYPE_LABEL: Record<string, string> = {
   bs: 'Pausenaufsicht',
 };
 
-function Row({ label, value }: { label: string; value: string | undefined }) {
+function Row({ label, value, multiline = false }: { label: string; value: string | undefined; multiline?: boolean }) {
   if (value === undefined || value === '') return null;
   return (
     <div>
       <dt className="text-[11px] font-medium tracking-wide text-fg-muted uppercase">{label}</dt>
-      <dd className="text-sm text-fg">{value}</dd>
+      <dd className={`text-sm text-fg ${multiline ? 'whitespace-pre-line' : ''}`}>{value}</dd>
     </div>
   );
 }
 
+interface PeriodDetailProps {
+  block: TimetableBlock;
+  /**
+   * "Lehrstoff" (Nutzerwunsch 2026-09-17, siehe IDEEN.md B8) — separat vom `block` selbst
+   * geladen (undokumentierter calendar-entry-detail-Endpunkt, `api/calendarEntryRest.ts`),
+   * deshalb ein eigenes Prop statt eines `TimetableBlock`-Felds: `TimetableScreen.tsx` fragt
+   * das erst ab, wenn diese Periode tatsächlich geöffnet wird, nicht für die ganze Woche
+   * vorab. `undefined`, solange der Ladevorgang läuft oder kein Treffer gefunden wurde.
+   */
+  teachingContent?: string | undefined;
+}
+
 /** Aufgeklappte Detailansicht einer Stundenplan-Periode — alles, was die Karte selbst nicht zeigt. */
-export function PeriodDetail({ block }: { block: TimetableBlock }) {
+export function PeriodDetail({ block, teachingContent }: PeriodDetailProps) {
   const durationMinutes = wuTimeToMinutes(block.endTime) - wuTimeToMinutes(block.startTime);
   const statusLabel = block.code === 'cancelled' ? 'Entfall' : block.code === 'irregular' ? 'Vertretung/Änderung' : undefined;
 
@@ -42,6 +54,7 @@ export function PeriodDetail({ block }: { block: TimetableBlock }) {
       <Row label="Vertretungstext" value={block.substText} />
       <Row label="Zusatzinfo" value={block.info} />
       <Row label="Hinweis" value={block.lstext} />
+      <Row label="Lehrstoff" value={teachingContent} multiline />
       <Row label="Buchungshinweis" value={block.bookingText} />
       <Row label="Buchungsvermerk" value={block.bookingRemark} />
 

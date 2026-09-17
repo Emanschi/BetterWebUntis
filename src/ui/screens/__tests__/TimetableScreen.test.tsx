@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimetableScreen } from '../TimetableScreen';
+import { App } from '../../App';
 import { setupMockWebUntisServer } from '../../../mock/msw/testServer';
 import { WebUntisClient } from '../../../api/client';
 import { FetchTransport } from '../../../api/transport';
@@ -32,6 +33,7 @@ afterEach(() => {
     errorMessage: undefined,
     client: null,
   });
+  window.location.hash = '';
 });
 
 /** sessionStore.login baut selbst einen Client per Proxy-Pfad — fuer den Test nutzen wir
@@ -191,5 +193,43 @@ describe('TimetableScreen', () => {
     const highlighted = document.querySelector('.bwu-neon-highlight');
     expect(highlighted).not.toBeNull();
     expect(highlighted?.textContent).toContain('AM');
+  });
+
+  it('zeigt Lehrstoff in der Detailansicht, wenn der calendar-entry-detail-Endpunkt Inhalt liefert', async () => {
+    // Nutzerwunsch 2026-09-17 (siehe IDEEN.md B8): Lehrkräfte können pro Stunde Lehrstoff
+    // eintragen — über einen separaten, undokumentierten Endpunkt (api/calendarEntryRest.ts),
+    // hier simuliert auf dem Montags-Deutsch-Slot (mock/timetable.ts hasTeachingContent).
+    const user = userEvent.setup();
+    await loginAsStudent();
+    renderScreen();
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+
+    // "D" ist als einziges Fach mit "D" anfangend eindeutig — "EDV1"/"EDV2" (Räume) würden
+    // ein reines /D/ sonst ebenfalls treffen.
+    const cards = await screen.findAllByRole('button', { name: /^D/ });
+    await user.click(cards[0]!);
+
+    expect(await screen.findByText(/Diskussionsthemen sammeln/)).toBeInTheDocument();
+  });
+
+  it('springt beim Klick auf "Stundenplan" in der Hauptnavigation zurück zur aktuellen Woche (Nutzerwunsch 2026-09-17)', async () => {
+    // "Anderswo im Jahr" simuliert durch eine Woche vorzublättern, dann über die
+    // Hauptnavigation (nicht die Screen-eigenen Vor/Zurück-Buttons) zurückzuspringen — dafür
+    // wird hier ausnahmsweise die volle App gerendert, weil die Navigation in AppShell.tsx
+    // liegt, nicht in TimetableScreen selbst.
+    const user = userEvent.setup();
+    await loginAsStudent();
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+    expect(await screen.findByText(/07\.09\. – 13\.09\.2026/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Nächste Woche' }));
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+    expect(await screen.findByText(/14\.09\. – 20\.09\.2026/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Stundenplan' }));
+
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+    expect(await screen.findByText(/07\.09\. – 13\.09\.2026/)).toBeInTheDocument();
   });
 });

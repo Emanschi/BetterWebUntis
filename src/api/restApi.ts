@@ -6,3 +6,4 @@
  */
 export * from './examsRest';
 export * from './absencesRest';
+export * from './calendarEntryRest';

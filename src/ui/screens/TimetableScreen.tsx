@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSessionStore } from '../../state/sessionStore';
-import { api } from '../../api/index';
+import { api, restApi } from '../../api/index';
 import {
   addWuDays,
   formatWuDate,
@@ -10,6 +10,7 @@ import {
   minutesToWuTime,
   toWuDate,
   wuDateToDate,
+  wuDateTimeToIsoLocal,
   wuTimeToMinutes,
   wuWeekRange,
 } from '../../api/format';
@@ -86,7 +87,7 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
   const personType = useSessionStore((s) => s.personType);
   const personId = useSessionStore((s) => s.personId);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const highlightDateParam = searchParams.get('highlightDate');
   const highlightStartParam = searchParams.get('highlightStart');
   const highlightEndParam = searchParams.get('highlightEnd');
@@ -105,6 +106,28 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
     const timer = setTimeout(() => setHighlightActive(false), HIGHLIGHT_DURATION_MS);
     return () => clearTimeout(timer);
   }, [highlightActive]);
+
+  // "Stundenplan"-Navlink springt zurück zu heute (Nutzerwunsch 2026-09-17): AppShell.tsx
+  // verlinkt dorthin mit "?resetToToday=1". Ein Klick auf diesen Link, während man schon auf
+  // /timetable ist, löst sonst KEINE Navigation aus, die selectedDate zurücksetzen würde —
+  // React Router remountet die Komponente nur bei einem echten Pfadwechsel (siehe "← Mein
+  // Plan", das wegen der eigenen Route /timetable/:segment/:id ohnehin frisch mountet). Der
+  // Parameter wird sofort wieder entfernt, damit derselbe Link beim nächsten Klick erneut
+  // eine erkennbare URL-Änderung auslöst. viewMode bleibt bewusst unverändert (Nutzerwunsch:
+  // "je nachdem was eingestellt ist").
+  useEffect(() => {
+    if (searchParams.get('resetToToday') === null) return;
+    setSelectedDate(toWuDate(new Date()));
+    setHighlightActive(false);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('resetToToday');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
 
   const weekStart = wuWeekRange(selectedDate).startDate;
   const weekEnd = addWuDays(weekStart, 6);
@@ -141,6 +164,30 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
         api.getSubstitutions(client, { startDate: weekStart, endDate: weekEnd, departmentId: 0 }).catch(() => []),
       ]);
       return mergeSubstitutions(periods, substitutions);
+    },
+  });
+
+  // "Lehrstoff" (Nutzerwunsch 2026-09-17, siehe IDEEN.md B8): separater, undokumentierter
+  // Endpunkt (api/calendarEntryRest.ts) pro geöffneter Periode, nicht Teil von getTimetable —
+  // deshalb ein eigener Query statt eines Felds auf TimetableBlock. Nur für die eigene
+  // Person (elementType=personType, wie gemessen) und nur für den eigenen Plan: für ein
+  // fremdes Element (Anderen Plan ansehen) ist das nie gemessen worden.
+  const calendarDetailQuery = useQuery({
+    queryKey: ['calendarEntryDetail', personId, personType, openBlock?.date, openBlock?.startTime, openBlock?.endTime],
+    enabled: client !== null && openBlock !== null && personId !== undefined && personType !== undefined && !isForeignElement,
+    // Fehlerformat ungemessen (siehe api/calendarEntryRest.ts) — kein Retry, um bei einem
+    // unbekannten Fehler (z. B. Rate-Limit) nicht automatisch nachzuhaken.
+    retry: false,
+    queryFn: async () => {
+      if (client === null || openBlock === null || personId === undefined || personType === undefined) {
+        throw new Error('Keine aktive Sitzung.');
+      }
+      return restApi.getCalendarEntryDetailRest(client, {
+        elementId: personId,
+        elementType: personType,
+        startDateTime: wuDateTimeToIsoLocal(openBlock.date, openBlock.startTime),
+        endDateTime: wuDateTimeToIsoLocal(openBlock.date, openBlock.endTime),
+      });
     },
   });
 
@@ -310,7 +357,7 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
 
       {openBlock !== null && (
         <Modal title={blockTitle(openBlock)} onClose={() => setOpenBlock(null)}>
-          <PeriodDetail block={openBlock} />
+          <PeriodDetail block={openBlock} teachingContent={calendarDetailQuery.data?.teachingContent} />
         </Modal>
       )}
     </div>

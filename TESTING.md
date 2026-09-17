@@ -482,3 +482,51 @@ Rechte-Probe mit ab.
       gemessen, nur angenommen; `scripts/smoke-test.ts` probiert es jetzt in der Rechte-Probe
 - [ ] Ob `-8507` auch für `getSubstitutions`/`getExams`/`getTimetableWithAbsences` gilt (nur für
       `getTimetable` direkt gemessen)
+
+### Echtes "Lehrstoff"-Feld gefunden, Rücksprung zu heute über die Navigation (2026-09-17)
+
+Details und Hintergrund: IDEEN.md B8, PLAN.md R11.
+
+**`bkText`/`bkRemark` war NICHT "Lehrstoff".** Die offene Frage aus dem vorigen Abschnitt ist
+beantwortet: der Nutzer hat einen Screenshot der echten WebUntis-Detailansicht ("Lehrstoff")
+mitsamt dem dazugehörigen Netzwerk-Request geliefert:
+
+```
+GET https://htlstp.webuntis.com/WebUntis/api/rest/view/v2/calendar-entry/detail?
+  elementId=<eigene personId>&elementType=5&startDateTime=2026-09-18T11:20:00&
+  endDateTime=2026-09-18T12:10:00&homeworkOption=DUE
+
+{"calendarEntries":[{"id":9059380, …,
+  "teachingContent":"Diskussionsthemen sammeln\nandere überzeugen: Gurkerl Sommerferien\n
+    Referatstermine und -themen\nBekanntgabe der Beurteilungskriterien", …}]}
+```
+
+Ein eigener Endpunkt für die Detailansicht EINES aufgeklappten Eintrags, identifiziert über
+die exakte Start-/Endzeit (ISO-Format, lokale Zeit) statt über eine Perioden-Id — anderes
+Anfrage-/Antwortformat als die Datumsbereich-Endpunkte aus dem vorigen Abschnitt, deshalb ein
+eigener Mock-Handler. Implementiert in `api/calendarEntryRest.ts`, genutzt von
+`TimetableScreen.tsx`/`PeriodDetail.tsx` (Feld "Lehrstoff", nur beim tatsächlichen Öffnen
+einer Periode abgefragt, nicht für die ganze Woche vorab).
+
+**"Stundenplan"-Klick sprang nicht zurück zu heute.** Bug, gefunden durch direktes
+Nutzer-Feedback: React Router remountet `TimetableScreen` nur bei einem echten Pfadwechsel —
+ein Klick auf den "Stundenplan"-Link in der Navigation, während man dort bereits ist, ändert
+am internen `selectedDate`-Zustand nichts. Behoben über einen `?resetToToday=1`-Marker im
+Link-Ziel, den der Screen per Effekt konsumiert und sofort wieder aus der URL entfernt.
+
+**Manuell verifiziert** (Mock-Server, `mmuster`, Light **und** Dark Mode):
+- Lehrstoff erscheint mehrzeilig mit erhaltenen Zeilenumbrüchen im Detail-Modal des
+  Montags-Deutsch-Slots
+- Drei Wochen vorblättern, "Stundenplan" in der Navigation klicken → zurück zur aktuellen
+  Woche; URL-Parameter danach wieder verschwunden (`window.location.hash` geprüft)
+- Vier Tage vorblättern in der Tagesansicht, "Stundenplan" klicken → zurück zum heutigen Tag,
+  Tagesansicht bleibt aktiv (kein Zurückfallen auf Wochenansicht)
+
+**Noch offen:**
+- [ ] Fehlerformat des calendar-entry-detail-Endpunkts bei abgelaufener Session — ungemessen
+- [ ] `teachingContent` bei einer im Stundenplan zusammengefassten Doppelstunde — die exakte
+      Einzelstunden-Zeitspanne dafür wurde nie gemessen (siehe IDEEN.md B8)
+- [ ] `notesAll`/`notesStaff` — in der gemessenen Antwort beide `null`, unklar, wie befüllter
+      Inhalt aussieht oder ob er für ein Schüler-Konto überhaupt sichtbar wäre
+- [ ] Endpunkt für ein fremdes Element (Anderen Plan ansehen) — nie gemessen, deshalb bewusst
+      nur für den eigenen Plan angefragt

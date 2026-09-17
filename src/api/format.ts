@@ -120,6 +120,18 @@ export function wuDateTimeToDate(date: WuDate, time: WuTime): Date {
   return result;
 }
 
+/**
+ * YYYYMMDD + HHMM → "YYYY-MM-DDTHH:mm:ss" in lokaler Zeit, ohne Zeitzone/Offset — das
+ * Format des undokumentierten calendar-entry-detail-Endpunkts (siehe api/calendarEntryRest.ts),
+ * gemessen am 2026-09-17. Nur ein Schreiber: der echte Client sendet dieses Format nur,
+ * empfängt es nie als Eingabe zurück.
+ */
+export function wuDateTimeToIsoLocal(date: WuDate, time: WuTime): string {
+  const d = wuDateTimeToDate(date, time);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 // ---------------------------------------------------------------------------
 // Farbe: RRGGBB
 // ---------------------------------------------------------------------------

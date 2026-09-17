@@ -27,6 +27,7 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | Elementwechsel: nur noch Klassen (Lehrer/Fach/Raum entfernt) | ✅ 231 Tests |
 | Kalender-Redesign: gefüllte Fach-Karten, Detailansicht, Fachfarben-Einstellungen | ✅ 250 Tests |
 | Nachbesserung: Settings-Fix (-8507), Buchungshinweis, Prüfungs-Sprung, Tages-/Wochenansicht | ✅ 257 Tests |
+| Echtes Lehrstoff-Feld (REST), Rücksprung zu heute über die Navigation | ✅ 259 Tests |
 | M9, M11 | offen |
 
 ## Befehle
@@ -53,8 +54,9 @@ das Konto überhaupt aufrufen darf. Ergebnisse gehören nach `TESTING.md`.
 
 ```
 src/api/        JSON-RPC-Layer — Typen, Transport, Client, Methoden (nur dokumentierte!)
-                Ausnahme: examsRest.ts/absencesRest.ts (undokumentierte REST-Endpunkte,
-                eigener Namensraum "restApi", ausdrücklich freigegeben — siehe IDEEN.md B3)
+                Ausnahme: examsRest.ts/absencesRest.ts/calendarEntryRest.ts (undokumentierte
+                REST-Endpunkte, eigener Namensraum "restApi", ausdrücklich freigegeben —
+                siehe IDEEN.md B3/B8)
 src/domain/     Fachlogik: Wochenraster, Doppelstunden-Merge, Fachfarben, ICS (M8)
 src/ui/         Komponenten, Screens, Routing, AppShell
 src/state/      Zustand-Stores (Theme, Session) — kein Netzzugriff, nur über src/api

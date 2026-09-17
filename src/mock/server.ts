@@ -16,11 +16,17 @@ import { SESSION_COOKIE } from '../api/client';
 import { createMockState, handleRpc, type MockServerState } from './rpcHandler';
 import { mockExamsRest } from './examsRestMock';
 import { mockAbsencesRest } from './absencesRestMock';
+import { mockCalendarEntryDetail, parseIsoLocalDateTime } from './calendarEntryRestMock';
+import type { MockElement } from './timetable';
 
 const JSONRPC_PATH = '/WebUntis/jsonrpc.do';
-/** Undokumentierte REST-Endpunkte (siehe api/examsRest.ts, api/absencesRest.ts) — kein Teil der 2018er-Doku. */
+/**
+ * Undokumentierte REST-Endpunkte (siehe api/examsRest.ts, api/absencesRest.ts,
+ * api/calendarEntryRest.ts) — kein Teil der 2018er-Doku.
+ */
 const EXAMS_REST_PATH = '/WebUntis/api/exams';
 const ABSENCES_REST_PATH = '/WebUntis/api/classreg/absences/students';
+const CALENDAR_ENTRY_DETAIL_PATH = '/WebUntis/api/rest/view/v2/calendar-entry/detail';
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -72,12 +78,16 @@ export function createMockHttpServer(state: MockServerState = createMockState())
       handleDateRangeRest(state, req, url, res, ABSENCES_REST_PATH, mockAbsencesRest, 'absences');
       return;
     }
+    if (req.method === 'GET' && path === CALENDAR_ENTRY_DETAIL_PATH) {
+      handleCalendarEntryDetailRest(state, req, url, res);
+      return;
+    }
 
     if (req.method !== 'POST' || path !== JSONRPC_PATH) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          error: `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH}, GET ${EXAMS_REST_PATH} oder GET ${ABSENCES_REST_PATH}`,
+          error: `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH}, GET ${EXAMS_REST_PATH}, GET ${ABSENCES_REST_PATH} oder GET ${CALENDAR_ENTRY_DETAIL_PATH}`,
         }),
       );
       return;
@@ -165,5 +175,32 @@ function handleDateRangeRest<T>(
   console.log(`  GET ${pathLabel.padEnd(40)} OK — ${items.length} ${wrapKey}`);
 }
 
+/**
+ * Simuliert den undokumentierten calendar-entry-detail-Endpunkt (siehe
+ * api/calendarEntryRest.ts) — anderes Anfrage-/Antwortformat als die beiden Datumsbereich-
+ * Endpunkte oben (ein einzelner Eintrag über exakte Start-/Endzeit statt einer Liste über
+ * einen Zeitraum), deshalb ein eigener Handler statt `handleDateRangeRest`.
+ */
+function handleCalendarEntryDetailRest(state: MockServerState, req: IncomingMessage, url: URL, res: ServerResponse): void {
+  const sessionId = readSessionCookie(req);
+  if (sessionId === undefined || !state.sessions.has(sessionId)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not authenticated (Annahme, real nie gemessen)' }));
+    return;
+  }
+
+  const elementId = Number(url.searchParams.get('elementId') ?? NaN);
+  const elementType = Number(url.searchParams.get('elementType') ?? NaN) as MockElement['type'];
+  const start = parseIsoLocalDateTime(url.searchParams.get('startDateTime') ?? '');
+  const end = parseIsoLocalDateTime(url.searchParams.get('endDateTime') ?? '');
+
+  const detail = mockCalendarEntryDetail({ id: elementId, type: elementType }, start.date, start.time, end.time);
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ calendarEntries: detail === undefined ? [] : [detail] }));
+  // eslint-disable-next-line no-console -- Mock-Server-Log ist gewollt, kein Produktionscode.
+  console.log(`  GET ${CALENDAR_ENTRY_DETAIL_PATH.padEnd(40)} OK — ${detail === undefined ? 'kein Treffer' : 'Treffer'}`);
+}
+
 export { createMockState, type MockServerState } from './rpcHandler';
-export { JSONRPC_PATH, EXAMS_REST_PATH, ABSENCES_REST_PATH };
+export { JSONRPC_PATH, EXAMS_REST_PATH, ABSENCES_REST_PATH, CALENDAR_ENTRY_DETAIL_PATH };
