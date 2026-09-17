@@ -181,6 +181,36 @@ export function buildWeekGrid(periods: readonly Period[], weekStart: WuDate): Ti
 }
 
 // ---------------------------------------------------------------------------
+// Prüfungen aus dem Stundenplan (Nachbesserung nach echtem Server-Test, siehe
+// IDEEN.md B3): getExams/getExamTypes sind für Schüler-Konten an der HTL St.
+// Pölten gemessen gesperrt (Code -8509), obwohl die originale WebUntis-Web-
+// oberfläche für dasselbe Konto Prüfungen anzeigt. Die Original-App markiert
+// Prüfungsstunden offenbar einfach im Stundenplan (lstype "ex", Doku
+// Abschnitt 14/15) — das ist mit `getTimetable` erreichbar, ein Recht, das
+// dieses Konto nachweislich hat. Deshalb: Prüfungen = Perioden mit lstype
+// "ex", nicht der eigentlich vorgesehene getExams-Weg.
+// ---------------------------------------------------------------------------
+
+/** Filtert Perioden auf Prüfungen (lstype "ex"), chronologisch sortiert. */
+export function examPeriods(periods: readonly Period[]): Period[] {
+  return periods.filter((p) => p.lstype === 'ex').toSorted((a, b) => a.date - b.date || a.startTime - b.startTime);
+}
+
+/**
+ * Freitext, den die Lehrkraft an einer Prüfungs-Periode hinterlassen hat — bei diesem
+ * Weg (Stundenplan statt getExams) die einzige verfügbare Zusatzinfo (z. B. "Schularbeit"
+ * oder ein Hinweis zum Stoff). Mehrere Felder können dieselbe Information doppelt tragen,
+ * deshalb werden Duplikate entfernt.
+ */
+export function examExtraText(period: Period): string | undefined {
+  const parts = [period.lstext, period.substText, period.info].filter(
+    (v): v is string => v !== undefined && v.length > 0,
+  );
+  const unique = [...new Set(parts)];
+  return unique.length > 0 ? unique.join(' — ') : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Zeitraster (Kalender-Ansicht, M5-Nachbesserung): wie hoch/weit ist die Achse,
 // die ein TimeAxis-/DayGridColumn-Paar in der UI zeichnet. Reine Mathematik ohne
 // React, damit sie unabhängig von der Komponente testbar ist.

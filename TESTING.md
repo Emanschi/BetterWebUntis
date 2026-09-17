@@ -330,23 +330,24 @@ ist nicht geklärt — nur dass er vorkommt und die UI ihn jetzt nicht mehr kapu
 - [ ] Liefern Fächer/Klassen echte `foreColor`/`backColor`, oder greift bei dieser Schule durchgehend der generierte Fallback aus `domain/colors.ts`?
 - [ ] Was der ganztägige Eintrag ohne Fach/Raum inhaltlich bedeutet
 
-### Nutzer-Feedback 2026-09-17: Rechte-Schluss aus Abschnitt 3 war zu voreilig
+### Nachmessung 2026-09-17: getExams direkt getestet — gesperrt, Prüfungen trotzdem gelöst
 
-Der Nutzer hat Screenshots der echten, originalen WebUntis-Weboberfläche geschickt (eingeloggt
-mit demselben Schüler-Konto wie oben): Prüfungen und Abwesenheiten werden dort ganz normal
-angezeigt. Das widerspricht dem obigen "❌ nein" bei `getExamTypes`/`getTimetableWithAbsences`
-nicht direkt (diese beiden Methoden sind nachweislich gesperrt), zeigt aber, dass der Schluss
-"also ist das Feature für dieses Konto tot" falsch war — `getExams` selbst (eigenes Recht laut
-Doku, "examinations read", getrennt von "examtypes read") wurde nie getestet.
+Der Nutzer hat `npm run smoke` mit dem erweiterten Skript gegen den echten Server erneut
+ausgeführt (dasselbe Schüler-Konto wie oben). Ergebnis:
 
-`scripts/smoke-test.ts` wurde erweitert:
-- die Rechte-Tabelle zeigt jetzt den rohen Fehlercode, nicht nur ja/nein
-- ein neuer Durchlauf probiert `getExams` direkt mit den IDs 1–10, unabhängig von `getExamTypes`
+| Methode | Recht? |
+|---|---|
+| `getExams` (direkt probiert, IDs 1–10, jeweils mit vollem Fehlercode) | ❌ nein, alle 10 mit Code -8509 |
+| alle übrigen Rechte aus Abschnitt "Rechte dieses Kontos" | unverändert zu oben |
 
-**Noch offen, braucht einen erneuten `npm run smoke`-Lauf vom Nutzer:**
-- [ ] Funktioniert `getExams` mit einer der geratenen IDs? Falls ja: Bug in `ExamsScreen.tsx`
-      (hängt aktuell hart von `getExamTypes` ab, siehe IDEEN.md B3), reiner Code-Fix.
-- [ ] Falls nein: `getExamTypes` und `getExams` sind beide gesperrt, ebenso `getTimetableWithAbsences`
-      → die originale Weboberfläche nutzt für diese Ansichten vermutlich die undokumentierte
-      REST-API statt JSON-RPC. Das wäre eine Grundsatzfrage (siehe IDEEN.md A1), keine, die sich
-      stillschweigend im Code lösen lässt.
+`getExamTypes` **und** `getExams` sind für dieses Konto also wirklich beide gesperrt — keine
+Verwechslung in der ersten Messung. Trotzdem zeigt die originale WebUntis-Weboberfläche für
+dasselbe Konto Prüfungen an (Screenshots vom Nutzer). Aufgelöst durch den Nutzer selbst: die
+Original-App markiert Prüfungsstunden im Stundenplan als solche (`lstype: "ex"`) — ein Feld,
+das `getTimetable` sowieso liefert und für das dieses Konto nachweislich ein Recht hat.
+
+**Umgesetzt:** `ExamsScreen.tsx` liest jetzt den Stundenplan des gewählten Schuljahres und
+filtert auf `lstype === "ex"`, statt `getExams` zu rufen. Details: IDEEN.md B3.
+
+**Abwesenheiten bleiben ungelöst** — `getTimetableWithAbsences` ist gesperrt, und der
+Stundenplan hat kein äquivalentes Feld dafür. Details: IDEEN.md B3.

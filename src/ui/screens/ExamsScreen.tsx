@@ -1,19 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { useSessionStore } from '../../state/sessionStore';
 import { api } from '../../api/index';
-import { addWuDays, formatWuDate, formatWuTime, toWuDate } from '../../api/format';
-import type { Exam } from '../../api/types';
+import { formatWuDate, formatWuTime, toWuDate, wuTimeToMinutes } from '../../api/format';
+import type { Period, Schoolyear, WuDate } from '../../api/types';
+import { examExtraText, examPeriods } from '../../domain/timetable';
 import { buildExamsIcs, type ExamIcsEntry } from '../../domain/ics';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
 import { Spinner } from '../components/Spinner';
-
-/** Ganzes Schuljahr grob angenähert: 6 Monate zurück bis 6 Monate voraus (kein extra Request nötig). */
-function examRange() {
-  const today = toWuDate(new Date());
-  return { startDate: addWuDays(today, -180), endDate: addWuDays(today, 180) };
-}
 
 /** Löst eine .ics-Datei als Browser-Download aus — rein clientseitig, kein Server beteiligt. */
 function downloadIcsFile(filename: string, content: string): void {
@@ -28,115 +24,148 @@ function downloadIcsFile(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
+/** Das Schuljahr, das heute enthält — sonst das zuletzt begonnene (z. B. in den Ferien). */
+function defaultSchoolyearId(schoolyears: readonly Schoolyear[], today: WuDate): number | undefined {
+  const containing = schoolyears.find((y) => y.startDate <= today && today <= y.endDate);
+  if (containing !== undefined) return containing.id;
+  return [...schoolyears].toSorted((a, b) => b.startDate - a.startDate)[0]?.id;
+}
+
+function subjectName(period: Period): string {
+  return period.su?.[0]?.longname ?? period.su?.[0]?.name ?? 'Unbekanntes Fach';
+}
+
 /**
- * Doku Abschnitt 21/22. `getExams` verlangt `examTypeId` als Pflichtparameter — es gibt
- * keine Abfrage über alle Typen hinweg (PLAN.md R5). Deshalb: erst `getExamTypes`, dann
- * parallel `getExams` je Typ, und die Ergebnisse zusammenführen.
+ * Doku Abschnitt 21/22 (`getExams`/`getExamTypes`) sind für Schüler-Konten an der HTL
+ * St. Pölten gemessen gesperrt (Code -8509, siehe TESTING.md Abschnitt 3+"Nutzer-Feedback").
+ * Die originale WebUntis-Oberfläche zeigt Prüfungen für genau dasselbe Konto trotzdem an —
+ * sie markiert Prüfungsstunden offenbar im Stundenplan selbst (lstype "ex"). Deshalb: über
+ * `getTimetable` für ein ganzes Schuljahr iterieren und auf lstype "ex" filtern, statt
+ * `getExams` zu rufen. Details und Hintergrund: IDEEN.md B3.
+ *
+ * Ein Schuljahr auf einmal (nicht "alle Prüfungen aller Jahre"), damit die Antwort auch bei
+ * mehreren Schuljahren in der Historie überschaubar bleibt — Auswahl über ein Dropdown.
  *
  * ICS-Export (M8): rein clientseitig, kein Server nötig (anders als der spätere
  * Kalenderabo-Feed aus M11, siehe IDEEN.md B2).
  */
 export function ExamsScreen() {
   const client = useSessionStore((s) => s.client);
-  const { startDate, endDate } = examRange();
+  const personType = useSessionStore((s) => s.personType);
+  const personId = useSessionStore((s) => s.personId);
+  const element = personType !== undefined && personId !== undefined ? { id: personId, type: personType } : undefined;
 
-  const examTypesQuery = useQuery({
-    queryKey: ['examTypes'],
+  const [selectedSchoolyearId, setSelectedSchoolyearId] = useState<number | undefined>(undefined);
+
+  const schoolyearsQuery = useQuery({
+    queryKey: ['schoolyears'],
     enabled: client !== null,
     queryFn: () => {
       if (client === null) throw new Error('Keine aktive Sitzung.');
-      return api.getExamTypes(client);
+      return api.getSchoolyears(client);
     },
   });
+
+  const today = toWuDate(new Date());
+  const effectiveSchoolyearId =
+    selectedSchoolyearId ?? (schoolyearsQuery.data !== undefined ? defaultSchoolyearId(schoolyearsQuery.data, today) : undefined);
+  const selectedSchoolyear = schoolyearsQuery.data?.find((y) => y.id === effectiveSchoolyearId);
 
   const examsQuery = useQuery({
-    queryKey: ['exams', examTypesQuery.data?.map((t) => t.id), startDate, endDate],
-    enabled: client !== null && examTypesQuery.data !== undefined,
+    queryKey: ['examPeriods', element, selectedSchoolyear?.id],
+    enabled: client !== null && element !== undefined && selectedSchoolyear !== undefined,
     queryFn: async () => {
-      if (client === null || examTypesQuery.data === undefined) throw new Error('Keine aktive Sitzung.');
-      const perType = await Promise.all(
-        examTypesQuery.data.map((type) =>
-          api.getExams(client, { examTypeId: type.id as number, startDate, endDate }),
-        ),
-      );
-      return perType.flat().sort((a, b) => a.date - b.date || a.startTime - b.startTime);
+      if (client === null || element === undefined || selectedSchoolyear === undefined) {
+        throw new Error('Keine aktive Sitzung.');
+      }
+      const periods = await api.getTimetableCustom(client, {
+        element,
+        startDate: selectedSchoolyear.startDate,
+        endDate: selectedSchoolyear.endDate,
+        showInfo: true,
+        showSubstText: true,
+        showLsText: true,
+        subjectFields: ['id', 'name', 'longname'],
+        roomFields: ['id', 'name'],
+        klasseFields: ['id', 'name'],
+      });
+      return examPeriods(periods);
     },
   });
-
-  const subjectsQuery = useQuery({
-    queryKey: ['subjects'],
-    enabled: client !== null,
-    queryFn: () => {
-      if (client === null) throw new Error('Keine aktive Sitzung.');
-      return api.getSubjects(client);
-    },
-  });
-
-  const klassenQuery = useQuery({
-    queryKey: ['klassen'],
-    enabled: client !== null,
-    queryFn: () => {
-      if (client === null) throw new Error('Keine aktive Sitzung.');
-      return api.getKlassen(client);
-    },
-  });
-
-  const subjectName = (subjectId: number): string =>
-    subjectsQuery.data?.find((s) => s.id === subjectId)?.longName ?? `Fach ${subjectId}`;
-
-  const klasseNames = (classIds: readonly number[]): string[] =>
-    classIds.map((id) => klassenQuery.data?.find((k) => k.id === id)?.name ?? `Klasse ${id}`);
-
-  const isLoading = examTypesQuery.isPending || (examTypesQuery.isSuccess && examsQuery.isPending);
-  const error = examTypesQuery.error ?? examsQuery.error;
 
   function handleExport(): void {
     if (examsQuery.data === undefined) return;
-    const entries: ExamIcsEntry[] = examsQuery.data.map((exam) => ({
-      exam,
-      subjectName: subjectName(exam.subject),
-      klasseNames: klasseNames(exam.classes),
+    const entries: ExamIcsEntry[] = examsQuery.data.map((period) => ({
+      period,
+      subjectName: subjectName(period),
+      klasseNames: period.kl?.map((k) => k.name ?? (k.id !== undefined ? `Klasse ${k.id}` : 'Klasse')),
     }));
     downloadIcsFile('pruefungen.ics', buildExamsIcs(entries));
   }
+
+  const isLoading = schoolyearsQuery.isPending || (selectedSchoolyear !== undefined && examsQuery.isPending);
+  const error = schoolyearsQuery.error ?? examsQuery.error;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-fg">Prüfungen</h1>
-          <p className="text-sm text-fg-muted">
-            {formatWuDate(startDate, 'de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' })} –{' '}
-            {formatWuDate(endDate, 'de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-          </p>
+          <p className="text-sm text-fg-muted">Als Prüfung markierte Stunden im Stundenplan.</p>
         </div>
-        {examsQuery.isSuccess && examsQuery.data.length > 0 && (
-          <Button variant="secondary" onClick={handleExport}>
-            Als ICS exportieren
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {schoolyearsQuery.data !== undefined && schoolyearsQuery.data.length > 0 && (
+            <label className="flex items-center gap-2 text-sm text-fg-muted">
+              Schuljahr
+              <select
+                className="rounded-md border border-border bg-bg px-2 py-1 text-sm text-fg"
+                value={effectiveSchoolyearId ?? ''}
+                onChange={(e) => setSelectedSchoolyearId(Number(e.target.value))}
+              >
+                {[...schoolyearsQuery.data]
+                  .toSorted((a, b) => b.startDate - a.startDate)
+                  .map((year) => (
+                    <option key={year.id} value={year.id}>
+                      {year.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
+          {examsQuery.isSuccess && examsQuery.data.length > 0 && (
+            <Button variant="secondary" onClick={handleExport}>
+              Als ICS exportieren
+            </Button>
+          )}
+        </div>
       </div>
 
       {isLoading && <Spinner label="Prüfungen werden geladen…" />}
-      {(examTypesQuery.isError || examsQuery.isError) && <ErrorState error={error} />}
+      {(schoolyearsQuery.isError || examsQuery.isError) && <ErrorState error={error} />}
 
       {examsQuery.isSuccess && examsQuery.data.length === 0 && (
-        <Card className="text-sm text-fg-muted">Keine Prüfungen in diesem Zeitraum.</Card>
+        <Card className="text-sm text-fg-muted">Keine Prüfungen in diesem Schuljahr.</Card>
       )}
 
       {examsQuery.isSuccess && examsQuery.data.length > 0 && (
         <div className="flex flex-col gap-2">
-          {examsQuery.data.map((exam: Exam) => (
-            <Card key={exam.id} className="flex items-center justify-between gap-3 text-sm">
-              <div>
-                <div className="font-medium text-fg">{subjectName(exam.subject)}</div>
-                <div className="text-fg-muted">
-                  {formatWuDate(exam.date)} · {formatWuTime(exam.startTime)}–{formatWuTime(exam.endTime)}
+          {examsQuery.data.map((period) => {
+            const extra = examExtraText(period);
+            const durationMinutes = wuTimeToMinutes(period.endTime) - wuTimeToMinutes(period.startTime);
+            return (
+              <Card key={period.id} className="flex flex-col gap-1 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span className="font-medium text-fg">{subjectName(period)}</span>
+                  <span className="text-fg-muted">
+                    {formatWuDate(period.date)} · {formatWuTime(period.startTime)}–{formatWuTime(period.endTime)} ·{' '}
+                    {durationMinutes} Min.
+                    {period.ro?.[0]?.name !== undefined ? ` · ${period.ro[0].name}` : ''}
+                  </span>
                 </div>
-              </div>
-              <div className="text-xs text-fg-muted">{exam.students.length} Schüler:innen</div>
-            </Card>
-          ))}
+                {extra !== undefined && <div className="text-fg-muted">{extra}</div>}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
