@@ -323,50 +323,64 @@ statt die Stundenachse zu verzerren. Im Mock nachgebildet (`ALL_DAY_EVENT_DATE` 
 **Offen:** was dieser Eintrag inhaltlich darstellt (Schulveranstaltung? Systemeintrag?)
 ist nicht geklärt — nur dass er vorkommt und die UI ihn jetzt nicht mehr kaputt macht.
 
-### Noch offen
+### Prüfungen ohne getExams — Weg zur Lösung, 2026-09-17
 
+Drei Messrunden am selben echten Schüler-Konto, jede mit `npm run smoke`:
+
+**Runde 1 (getExams direkt):** `getExamTypes` war schon als gesperrt bekannt (Abschnitt 3).
+`scripts/smoke-test.ts` erweitert, probiert seitdem `getExams` direkt mit den IDs 1–10 — alle
+10 mit Code -8509. Also nicht nur `getExamTypes`, auch `getExams` selbst ist für dieses Konto
+gesperrt. Trotzdem zeigt die originale WebUntis-Weboberfläche für dasselbe Konto Prüfungen an.
+
+**Runde 2 (Diagnose des Stundenplans):** Naheliegende Theorie: die Original-App markiert
+Prüfungsstunden im Stundenplan (`lstype: "ex"`, ein Feld, das `getTimetable` liefert und für
+das dieses Konto ein Recht hat). `scripts/smoke-test.ts` bekam einen Diagnose-Block: lädt das
+komplette Schuljahr, zählt die Verteilung von `lstype`/`code`/`activityType` über alle Perioden
+und sucht gezielt nach einer aus der Original-App bekannten Prüfung. Ergebnis:
+
+```
+1466 Perioden im ganzen Schuljahr geladen.
+lstype-Verteilung: { '(leer)': 1466 }
+code-Verteilung: { irregular: 12, cancelled: 40, '(leer)': 1414 }
+Gefunden (1x) — volle Rohdaten:
+  {"id":9392681,"date":20260918,"startTime":1220,"endTime":1310,
+   "kl":[{"id":5022,"name":"3BHIF"}],"te":[{"id":96,"name":"MAYR"}],
+   "su":[{"id":176,"name":"NW2","longname":"NATURWISSENSCHAFTEN"}],
+   "ro":[{"id":343,"name":"N306"}],"lsnumber":137500,
+   "info":"SMÜ Nomenklatur","activityType":"Unterricht"}
+```
+
+**Kein einziges** der 1466 Perioden hatte `lstype` gesetzt — auch nicht die echte
+Prüfungsstunde. Sie war strukturell nicht von einer normalen Stunde zu unterscheiden, nur ein
+freier `info`-Text ("SMÜ Nomenklatur") verriet sie. Die `lstype`-Theorie war damit widerlegt:
+es gibt keinen Weg über die dokumentierte API, Prüfungen für dieses Konto zuverlässig zu
+erkennen.
+
+**Runde 3 (undokumentierter REST-Endpunkt, mit Freigabe):** Drei Optionen vorgelegt
+(undokumentierte Schnittstelle nutzen / Text-Heuristik auf Notizen / Feature aufgeben) — der
+Nutzer entscheidet sich für die Schnittstelle und liefert sie selbst aus den Browser-DevTools
+der originalen Weboberfläche:
+
+```
+GET https://htlstp.webuntis.com/WebUntis/api/exams?startDate=20260901&endDate=20260930&studentId=<personId>&withGrades=true&klasseId=-1
+
+{"data":{"exams":[{"id":0,"examType":"SA_TE","name":"NW2","studentClass":["3BHIF"],
+  "examDate":20260918,"startTime":1220,"endTime":1310,"subject":"NW2",
+  "teachers":["MAYR"],"rooms":["N306"],"text":"Nomenklatur","grade":""}]}}
+```
+
+Bereits aufgelöste Kurzcodes (Fach/Lehrkraft/Raum als Strings, kein Nachschlagen nötig) — genau
+das, was die "Prüfungen"-Seite der Original-App zeigt. Implementiert in `api/examsRest.ts`
+(eigener Namensraum `restApi`, bewusst getrennt von den dokumentierten Methoden), genutzt von
+`ExamsScreen.tsx`. Details, Risiko und offene Punkte: IDEEN.md B3, `api/examsRest.ts`.
+
+**Noch offen:**
+- [ ] Erneuter Login-Test gegen den echten Server: funktioniert `getRest()` (Cookie-Auth,
+      Proxy-Pfad `/WebUntis/api/exams`) dort genauso wie gegen den Mock?
+- [ ] Fehlerverhalten des Endpunkts bei abgelaufener Session ist ungemessen (aktuell nur grober
+      HTTP-Status, siehe `WebUntisClient.getRest`)
 - [ ] Test mit einem Lehrer-Konto gegen den echten Server (bisher nur simuliert über `aschmidt` im Mock)
 - [ ] `getTimetableWithAbsences`: sind `externalkey`s an dieser Schule überhaupt gepflegt? (kein Recht zum Prüfen bei diesem Konto)
 - [ ] Liefern Fächer/Klassen echte `foreColor`/`backColor`, oder greift bei dieser Schule durchgehend der generierte Fallback aus `domain/colors.ts`?
 - [ ] Was der ganztägige Eintrag ohne Fach/Raum inhaltlich bedeutet
-
-### Nachmessung 2026-09-17: getExams direkt getestet — gesperrt, Prüfungen trotzdem gelöst
-
-Der Nutzer hat `npm run smoke` mit dem erweiterten Skript gegen den echten Server erneut
-ausgeführt (dasselbe Schüler-Konto wie oben). Ergebnis:
-
-| Methode | Recht? |
-|---|---|
-| `getExams` (direkt probiert, IDs 1–10, jeweils mit vollem Fehlercode) | ❌ nein, alle 10 mit Code -8509 |
-| alle übrigen Rechte aus Abschnitt "Rechte dieses Kontos" | unverändert zu oben |
-
-`getExamTypes` **und** `getExams` sind für dieses Konto also wirklich beide gesperrt — keine
-Verwechslung in der ersten Messung. Trotzdem zeigt die originale WebUntis-Weboberfläche für
-dasselbe Konto Prüfungen an (Screenshots vom Nutzer). Aufgelöst durch den Nutzer selbst: die
-Original-App markiert Prüfungsstunden im Stundenplan als solche (`lstype: "ex"`) — ein Feld,
-das `getTimetable` sowieso liefert und für das dieses Konto nachweislich ein Recht hat.
-
-**Umgesetzt:** `ExamsScreen.tsx` liest jetzt den Stundenplan des gewählten Schuljahres und
-filtert auf `lstype === "ex"`, statt `getExams` zu rufen. Details: IDEEN.md B3.
-
-**Abwesenheiten bleiben ungelöst** — `getTimetableWithAbsences` ist gesperrt, und der
-Stundenplan hat kein äquivalentes Feld dafür. Details: IDEEN.md B3. Auf Nutzerwunsch
-(2026-09-17) ist der Tab jetzt entfernt statt eine Fehlermeldung zu zeigen.
-
-### Nutzer-Feedback 2026-09-17 (zweite Runde): lstype "ex" zeigt beim echten Server keine Treffer
-
-Schuljahr-Filter funktioniert (vom Nutzer bestätigt), aber "Keine Prüfungen in diesem
-Schuljahr" trotz einer laut Original-App real existierenden Prüfung (18.09.2026, 12:20–13:10,
-Fach NW2, siehe Screenshot vom Nutzer weiter oben). `lstype === "ex"` war eine aus der Doku
-plausible, aber nie am echten Server verifizierte Annahme.
-
-`scripts/smoke-test.ts` hat jetzt einen Diagnose-Block: lädt das komplette aktuelle Schuljahr
-über `getTimetable`, zählt die Verteilung von `lstype`/`code`/`activityType` über alle Perioden
-und sucht gezielt nach dem bekannten Termin, um dessen volle Rohdaten auszugeben.
-
-**Noch offen, braucht einen erneuten `npm run smoke`-Lauf vom Nutzer:**
-- [ ] Taucht der 18.09.2026-Termin in `getTimetable` überhaupt auf?
-- [ ] Falls ja: welches Feld markiert ihn tatsächlich als Prüfung (falls nicht `lstype`)?
-- [ ] Falls nein: die Prüfung kommt aus einer Quelle, die `getTimetable` gar nicht sieht —
-      dann bräuchte es eine Grundsatzentscheidung über undokumentierte Endpunkte (IDEEN.md A1),
-      kein Code-Fix mehr.
+- [ ] Abwesenheiten bleiben ungelöst (Tab entfernt, siehe IDEEN.md B3b) — kein äquivalentes Feld/Endpunkt gefunden

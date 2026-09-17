@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildWeekGrid,
-  computeTimeBounds,
-  DEFAULT_TIME_BOUNDS,
-  examExtraText,
-  examPeriods,
-  mergeSubstitutions,
-  timeBoundsHourMarks,
-} from '../timetable';
+import { buildWeekGrid, computeTimeBounds, DEFAULT_TIME_BOUNDS, mergeSubstitutions, timeBoundsHourMarks } from '../timetable';
 import type { Period, Substitution } from '../../api/types';
 
 function period(overrides: Partial<Period> & Pick<Period, 'id' | 'date' | 'startTime' | 'endTime'>): Period {
@@ -169,46 +161,6 @@ describe('buildWeekGrid', () => {
   });
 });
 
-describe('examPeriods', () => {
-  it('filtert auf lstype "ex" und laesst normalen Unterricht weg', () => {
-    const periods = [
-      period({ id: 1, date: 20260910, startTime: 855, endTime: 945, lstype: 'ex' }),
-      period({ id: 2, date: 20260907, startTime: 800, endTime: 850 }), // normale Stunde
-      period({ id: 3, date: 20260911, startTime: 1150, endTime: 1240, lstype: 'oh' }), // andere lstype
-    ];
-    expect(examPeriods(periods).map((p) => p.id)).toEqual([1]);
-  });
-
-  it('sortiert chronologisch, unabhaengig von der Eingabereihenfolge', () => {
-    const periods = [
-      period({ id: 10, date: 20261119, startTime: 855, endTime: 945, lstype: 'ex' }),
-      period({ id: 11, date: 20260910, startTime: 855, endTime: 945, lstype: 'ex' }),
-    ];
-    expect(examPeriods(periods).map((p) => p.id)).toEqual([11, 10]);
-  });
-
-  it('liefert eine leere Liste, wenn keine Pruefung dabei ist', () => {
-    const periods = [period({ id: 1, date: 20260907, startTime: 800, endTime: 850 })];
-    expect(examPeriods(periods)).toEqual([]);
-  });
-});
-
-describe('examExtraText', () => {
-  it('kombiniert lstext/substText/info ohne Duplikate', () => {
-    const p = period({ id: 1, date: 20260910, startTime: 855, endTime: 945, lstext: 'Schularbeit', info: 'Schularbeit' });
-    expect(examExtraText(p)).toBe('Schularbeit');
-  });
-
-  it('kombiniert unterschiedliche Texte mit einem Trennzeichen', () => {
-    const p = period({ id: 1, date: 20260910, startTime: 855, endTime: 945, lstext: 'Schularbeit', info: '1. Test' });
-    expect(examExtraText(p)).toBe('Schularbeit — 1. Test');
-  });
-
-  it('liefert undefined, wenn kein Zusatztext vorhanden ist', () => {
-    const p = period({ id: 1, date: 20260910, startTime: 855, endTime: 945 });
-    expect(examExtraText(p)).toBeUndefined();
-  });
-});
 
 describe('computeTimeBounds', () => {
   it('liefert den Fallback, wenn keine Woche Perioden hat', () => {

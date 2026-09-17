@@ -61,8 +61,9 @@ describe('ICS-Export (M8, Nachbesserung IDEEN.md B3: Grundlage ist der Stundenpl
 
     const text = await capturedBlob!.text();
     expect(text).toContain('BEGIN:VCALENDAR');
-    expect(text).toContain('SUMMARY:Angewandte Mathematik — Prüfung');
+    expect(text).toContain('SUMMARY:AM — Prüfung');
     expect(text).toContain('Klasse: 3AHIF');
+    expect(text).toContain('Lehrkraft: MUS');
 
     createObjectUrlSpy.mockRestore();
     revokeSpy.mockRestore();

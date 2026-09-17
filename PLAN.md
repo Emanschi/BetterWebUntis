@@ -114,10 +114,16 @@ Harte Regel: `ui/` und `domain/` reden **nie** direkt mit dem Netz, nur über `a
 **R4 – Rechte.** `getSubstitutions`, `getStudents`, `getExams`, `getTimetableWithAbsences` hängen an Rechten, die ein Schüler-Account oft nicht hat. Jeder Screen muss sauber degradieren statt zu crashen. Der eigene Stundenplan bleibt auch ohne `getSubstitutions` brauchbar, weil `code`/`substText`/`info` bereits in `getTimetable` (customizable) stecken.
 
 **R5 – `getExams` verlangt `examTypeId` als Pflichtparameter.** Also erst `getExamTypes`, dann pro Typ abfragen und zusammenführen. Fehlt das Recht auf `getExamTypes`, ist der Prüfungsexport nur eingeschränkt möglich.
+*Eingetreten und gelöst (2026-09-17):* Für echte Schüler-Konten an der HTL St. Pölten sind sowohl `getExamTypes` als auch `getExams` selbst gesperrt (Code -8509, direkt gemessen). Auch ein Feld im Stundenplan (`lstype`) hilft nicht — echte Prüfungsstunden tragen keins. Gelöst über einen undokumentierten REST-Endpunkt, siehe R8.
 
 **R6 – `getTimetableWithAbsences` liefert externalkeys, keine ids.** Auflösung nur über Masterdata mit `externalkey` – die aber nicht jede Schule pflegt. Fallback: Rohanzeige.
 
 **R7 – Rate-Limits.** WebUntis drosselt. Masterdata (Lehrer/Klassen/Fächer/Räume/Timegrid/Holidays) wird pro Schuljahr einmal geholt und lokal gecacht.
+
+**R8 – Undokumentierter REST-Endpunkt für Prüfungen, ausdrücklich freigegeben (2026-09-17).** Siehe R5: Die 2018er-JSON-RPC-Doku reicht für Prüfungen bei echten Schüler-Konten nicht aus. Der Nutzer hat aus den Browser-DevTools der originalen WebUntis-Oberfläche `GET /WebUntis/api/exams?startDate=…&endDate=…&studentId=…&withGrades=true&klasseId=-1` kopiert und dessen Nutzung freigegeben — Details und die gemessene Beispielantwort in `src/api/examsRest.ts`. Bewusst von `methods.ts` getrennt (eigener Namensraum `restApi`, siehe `api/index.ts`), damit an jeder Aufrufstelle sichtbar bleibt, was dokumentiert ist und was nicht.
+Zwei offene Punkte:
+- **Fehlerformat ungemessen.** Nur grob als HTTP-Status behandelt (`WebUntisClient.getRest`), nicht mit der Rechte-Feinauflösung aus `errors.ts`.
+- **Produktions-Proxy (M11, noch nicht gebaut) deckt das noch nicht ab.** Der in B1/IDEEN.md geplante PHP-Proxy leitet laut Plan nur `jsonrpc.do` weiter, nicht beliebige `/WebUntis/*`-Pfade. Muss erweitert werden, bevor dieser Endpunkt in Produktion funktioniert — im Dev-Vite-Proxy (leitet den ganzen `/WebUntis`-Präfix weiter) funktioniert er schon.
 
 ---
 

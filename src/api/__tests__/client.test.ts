@@ -261,6 +261,63 @@ describe('Warteschlange', () => {
   });
 });
 
+describe('getRest — undokumentierte REST-Endpunkte (siehe examsRest.ts)', () => {
+  it('baut die URL aus der Basis ohne "/jsonrpc.do" plus Pfad und Query', async () => {
+    const { client, transport } = makeClient();
+    transport.queue('{"data":{"exams":[]}}');
+
+    await client.getRest('/api/exams', { startDate: 20260901, endDate: 20260930, studentId: 15436 });
+
+    expect(transport.getRequests[0]?.url).toBe(
+      'https://example.webuntis.com/WebUntis/api/exams?startDate=20260901&endDate=20260930&studentId=15436',
+    );
+  });
+
+  it('schickt das Session-Cookie mit, wenn eine Session besteht', async () => {
+    const { client, transport } = makeClient();
+    client.setSession({ sessionId: 'ABC123', personType: 5, personId: 42 });
+    transport.queue('{"data":{"exams":[]}}');
+
+    await client.getRest('/api/exams', {});
+
+    expect(transport.getRequests[0]?.headers['Cookie']).toContain('JSESSIONID=ABC123');
+  });
+
+  it('gibt die geparste JSON-Antwort ohne JSON-RPC-Umschlag zurueck', async () => {
+    const { client, transport } = makeClient();
+    transport.queue('{"data":{"exams":[{"id":1}]}}');
+
+    await expect(client.getRest('/api/exams', {})).resolves.toEqual({ data: { exams: [{ id: 1 }] } });
+  });
+
+  it('wirft einen TransportError bei HTTP-Fehlern', async () => {
+    const { client, transport } = makeClient();
+    transport.queue({ status: 401, body: '' });
+
+    const error = await client.getRest('/api/exams', {}).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(WebUntisTransportError);
+    expect((error as WebUntisTransportError).status).toBe(401);
+  });
+
+  it('wirft einen TransportError bei kaputtem JSON statt abzustuerzen', async () => {
+    const { client, transport } = makeClient();
+    transport.queue('<html>Wartungsarbeiten</html>');
+
+    await expect(client.getRest('/api/exams', {})).rejects.toBeInstanceOf(WebUntisTransportError);
+  });
+
+  it('teilt sich die Warteschlange mit call() — serialisiert auch gemischte Aufrufe', async () => {
+    const { client, transport } = makeClient();
+    transport.queue('{"jsonrpc":"2.0","id":"bwu-1","result":"rpc"}');
+    transport.queue('{"data":{"exams":[]}}');
+
+    const results = await Promise.all([client.call('getRooms'), client.getRest('/api/exams', {})]);
+
+    expect(results).toEqual(['rpc', { data: { exams: [] } }]);
+  });
+});
+
 describe('Hilfsfunktionen', () => {
   it('baut die direkte Endpunkt-URL', () => {
     expect(directEndpoint('htlstp.webuntis.com')).toBe('https://htlstp.webuntis.com/WebUntis/jsonrpc.do');

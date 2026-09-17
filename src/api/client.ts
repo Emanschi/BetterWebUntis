@@ -106,10 +106,21 @@ export class WebUntisClient {
    * `minRequestGapMs` Abstand abgeschickt.
    */
   async call<TResult>(method: string, params: unknown = {}): Promise<TResult> {
-    const run = this.#queue.then(
-      () => this.#execute<TResult>(method, params),
-      () => this.#execute<TResult>(method, params),
-    );
+    return this.#enqueue(() => this.#execute<TResult>(method, params));
+  }
+
+  /**
+   * GET gegen einen REST-Endpunkt unter derselben Basis wie jsonrpc.do (z. B. "/api/exams"),
+   * ohne JSON-RPC-Umschlag — der Aufrufer bekommt die rohe geparste JSON-Antwort. Nur für
+   * undokumentierte Endpunkte gedacht (siehe api/examsRest.ts und IDEEN.md B3); dokumentierte
+   * Methoden laufen immer über `call()`. Teilt sich Warteschlange und Drosselung mit `call()`.
+   */
+  async getRest<TResult>(path: string, query: Record<string, string | number | boolean>): Promise<TResult> {
+    return this.#enqueue(() => this.#executeRest<TResult>(path, query));
+  }
+
+  #enqueue<TResult>(task: () => Promise<TResult>): Promise<TResult> {
+    const run = this.#queue.then(task, task);
     // Die Warteschlange darf durch einen Fehler nicht abreißen.
     this.#queue = run.catch(() => undefined);
     return run;
@@ -188,6 +199,53 @@ export class WebUntisClient {
     }
 
     return envelope.result as TResult;
+  }
+
+  async #executeRest<TResult>(path: string, query: Record<string, string | number | boolean>): Promise<TResult> {
+    await this.#respectRateLimit();
+
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) qs.set(key, String(value));
+    const url = `${this.#restBase()}${path}?${qs.toString()}`;
+
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (this.#transport.canSetCookieHeader) {
+      const cookieHeader = this.#cookieHeader();
+      if (cookieHeader !== undefined) headers['Cookie'] = cookieHeader;
+    }
+
+    let response;
+    try {
+      response = await this.#transport.sendGet({ url, headers });
+    } catch (cause) {
+      throw new WebUntisTransportError(`Netzwerkfehler beim Aufruf von "${path}".`, path, { cause });
+    } finally {
+      this.#lastRequestAt = Date.now();
+    }
+
+    this.#absorbCookies(response.setCookie);
+
+    if (response.status < 200 || response.status >= 300) {
+      throw new WebUntisTransportError(`HTTP ${response.status} beim Aufruf von "${path}".`, path, {
+        status: response.status,
+        body: response.body,
+      });
+    }
+
+    try {
+      return JSON.parse(response.body) as TResult;
+    } catch (cause) {
+      throw new WebUntisTransportError(`Antwort auf "${path}" ist kein gueltiges JSON.`, path, {
+        status: response.status,
+        body: response.body,
+        cause,
+      });
+    }
+  }
+
+  /** Basis-URL ohne "/jsonrpc.do" — für REST-Aufrufe unter demselben Host/Proxy-Pfad. */
+  #restBase(): string {
+    return this.endpoint.replace(/\/jsonrpc\.do$/, '');
   }
 
   /** Merkt sich die Session-Id aus einem authenticate-Result. */

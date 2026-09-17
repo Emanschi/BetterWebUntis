@@ -35,29 +35,35 @@ async function loginAs(user: ReturnType<typeof userEvent.setup>, name: string, p
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Stundenplan' })).toBeInTheDocument());
 }
 
-describe('Prüfungen (Nachbesserung nach echtem Server-Test, IDEEN.md B3)', () => {
-  it('Schueler-Konto sieht Pruefungen — ueber lstype "ex" im Stundenplan, nicht getExams', async () => {
-    // getExamTypes/getExams sind fuer echte Schueler-Konten gesperrt (Code -8509, siehe
-    // TESTING.md). Der Workaround liest stattdessen den Stundenplan des Schuljahres und
-    // filtert auf lstype "ex" — das mmuster-Konto sieht seine eigene Klasse, exam-Slot ist
-    // Donnerstag/3. Stunde, subjectId 5 "Angewandte Mathematik" (siehe mock/timetable.ts).
+describe('Prüfungen (Nachbesserung: REST-Workaround statt getExams, IDEEN.md B3)', () => {
+  it('Schueler-Konto sieht Pruefungen ueber den REST-Workaround', async () => {
+    // getExamTypes/getExams sind fuer echte Schueler-Konten gesperrt (Code -8509), UND
+    // Pruefungsstunden im Stundenplan haben kein lstype/code (gemessen 2026-09-17, siehe
+    // TESTING.md). Der Workaround ruft stattdessen /WebUntis/api/exams auf (siehe
+    // api/examsRest.ts, mock/examsRestMock.ts liefert dieselben fuenf Fixtermine wie die
+    // "Schularbeit"-Randfaelle im Stundenplan-Mock).
     const user = userEvent.setup();
     render(<App />);
     await loginAs(user, 'mmuster', 'test1234');
 
     await user.click(screen.getByRole('link', { name: 'Prüfungen' }));
 
-    expect((await screen.findAllByText('Angewandte Mathematik')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('AM')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('SA_TE').length).toBeGreaterThan(0);
+    // Erster Fixtermin ist testweise benotet (mock/examsRestMock.ts) — zeigt, dass die
+    // UI eine vorhandene Note anzeigen kann.
+    expect(screen.getByText(/Note: 2 Gut/)).toBeInTheDocument();
   });
 
-  it('Lehrer-Konto, das den Pruefungs-Slot nicht selbst unterrichtet, sieht den Leer-Hinweis', async () => {
-    // aschmidt (Lehrer-Id 11) unterrichtet den Mock-Exam-Slot nicht (Lehrer-Id 10) — die
-    // eigene Lehrer-Sicht auf den Stundenplan enthaelt ihn deshalb korrekt nicht.
+  it('Schuljahr-Wechsel filtert die Liste (2025/2026 hat keine Fixtermine)', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await loginAs(user, 'aschmidt', 'test1234');
+    await loginAs(user, 'mmuster', 'test1234');
 
     await user.click(screen.getByRole('link', { name: 'Prüfungen' }));
+    await screen.findAllByText('AM');
+
+    await user.selectOptions(screen.getByLabelText('Schuljahr'), '2025/2026');
 
     expect(await screen.findByText('Keine Prüfungen in diesem Schuljahr.')).toBeInTheDocument();
   });

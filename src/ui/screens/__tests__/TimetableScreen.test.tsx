@@ -70,8 +70,9 @@ describe('TimetableScreen', () => {
     expect(await screen.findByText(/Entfall/)).toBeInTheDocument();
     // Vertretung/Raumaenderung (mind. eine der beiden sichtbaren Warnungen)
     expect(screen.getAllByText(/⚠/).length).toBeGreaterThan(0);
-    // Pruefung (Donnerstag, lstype ex)
-    expect(screen.getByText('Prüfung')).toBeInTheDocument();
+    // Pruefung (Donnerstag): kein Badge mehr (echte Pruefungsstunden haben laut Messung
+    // vom 2026-09-17 kein lstype, siehe IDEEN.md B3) — nur noch als Tooltip-Text sichtbar.
+    expect(screen.getByTitle('1. Schularbeit')).toBeInTheDocument();
     // Wochentage sind da
     expect(screen.getByText(/^Mo ·/)).toBeInTheDocument();
     expect(screen.getByText(/^Fr ·/)).toBeInTheDocument();

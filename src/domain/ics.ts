@@ -3,8 +3,9 @@
  * Zusatzfeature im Projektauftrag und IDEEN.md B2: der Abo-Feed mit Server-Zugriff
  * ist bewusst ein separater, späterer Schritt, M11).
  *
- * Grundlage sind Perioden mit lstype "ex" aus `getTimetable`, nicht `getExams` —
- * siehe `domain/timetable.ts` (`examPeriods`) und IDEEN.md B3 für den Hintergrund.
+ * Grundlage ist `RestExam` aus `api/examsRest.ts` (undokumentierter REST-Workaround) —
+ * siehe IDEEN.md B3 für den Hintergrund, warum weder `getExams` noch ein Feld im
+ * Stundenplan selbst dafür ausreichen.
  *
  * Zeitzone: Die API liefert keine Zeitzoneninformation, nur Datum/Zeit in Lokalzeit
  * der Schule. Wir schreiben deshalb "floating time" (kein TZID, kein Z-Suffix) — die
@@ -13,14 +14,7 @@
  */
 
 import { wuDateTimeToDate } from '../api/format';
-import type { Period, WuDate, WuTime } from '../api/types';
-import { examExtraText } from './timetable';
-
-export interface ExamIcsEntry {
-  period: Period;
-  subjectName: string;
-  klasseNames?: string[] | undefined;
-}
+import type { RestExam } from '../api/examsRest';
 
 const ICS_LINE_BREAK = '\r\n';
 /** RFC 5545 §3.1: Zeilen dürfen höchstens 75 Oktette lang sein, danach gefaltet werden. */
@@ -45,7 +39,7 @@ function foldLine(line: string): string {
   return parts.join(ICS_LINE_BREAK);
 }
 
-function formatIcsDateTime(date: WuDate, time: WuTime): string {
+function formatIcsDateTime(date: number, time: number): string {
   const d = wuDateTimeToDate(date, time);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
@@ -60,33 +54,50 @@ function formatIcsTimestampUtc(date: Date): string {
   );
 }
 
-/** Stabile UID je Prüfungs-Periode — wichtig, damit ein erneuter Export/Import dieselbe Prüfung erkennt. */
-export function examUid(period: Period): string {
-  return `exam-period-${period.id}@betterwebuntis.local`;
+function slugify(value: string): string {
+  const slug = value
+    .replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+  return slug === '' ? 'fach' : slug;
 }
 
 /**
- * Baut eine vollständige .ics-Datei aus einer Liste von Prüfungs-Perioden.
+ * Stabile UID je Prüfung — wichtig, damit ein erneuter Export/Import dieselbe Prüfung
+ * erkennt. Bewusst NICHT aus `exam.id` gebaut: in der einen echten Beispielantwort war
+ * das Feld `0` (siehe api/examsRest.ts) — undokumentiert und nicht als eindeutige Id
+ * verifizierbar. Datum+Uhrzeit+Fach identifizieren eine Prüfung in der Praxis eindeutig.
+ */
+export function examUid(exam: RestExam): string {
+  return `exam-${exam.examDate}-${exam.startTime}-${slugify(exam.subject || exam.name)}@betterwebuntis.local`;
+}
+
+/**
+ * Baut eine vollständige .ics-Datei aus einer Liste von Prüfungen.
  * `now` ist injizierbar für deterministische Tests.
  */
-export function buildExamsIcs(entries: readonly ExamIcsEntry[], now: Date = new Date()): string {
+export function buildExamsIcs(exams: readonly RestExam[], now: Date = new Date()): string {
   const dtstamp = formatIcsTimestampUtc(now);
   const lines: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BetterWebUntis//Pruefungsexport//DE', 'CALSCALE:GREGORIAN'];
 
-  for (const entry of entries) {
-    const { period, subjectName, klasseNames } = entry;
-    const summary = `${subjectName} — Prüfung`;
+  for (const exam of exams) {
+    const summary = `${exam.subject || exam.name} — Prüfung`;
     const descriptionParts = [
-      klasseNames !== undefined && klasseNames.length > 0 ? `Klasse: ${klasseNames.join(', ')}` : undefined,
-      examExtraText(period),
+      exam.studentClass.length > 0 ? `Klasse: ${exam.studentClass.join(', ')}` : undefined,
+      exam.teachers.length > 0 ? `Lehrkraft: ${exam.teachers.join(', ')}` : undefined,
+      exam.text !== '' ? exam.text : undefined,
+      exam.grade !== '' ? `Note: ${exam.grade}` : undefined,
     ].filter((p): p is string => p !== undefined);
 
     lines.push('BEGIN:VEVENT');
-    lines.push(foldLine(`UID:${examUid(period)}`));
+    lines.push(foldLine(`UID:${examUid(exam)}`));
     lines.push(foldLine(`DTSTAMP:${dtstamp}`));
-    lines.push(foldLine(`DTSTART:${formatIcsDateTime(period.date, period.startTime)}`));
-    lines.push(foldLine(`DTEND:${formatIcsDateTime(period.date, period.endTime)}`));
+    lines.push(foldLine(`DTSTART:${formatIcsDateTime(exam.examDate, exam.startTime)}`));
+    lines.push(foldLine(`DTEND:${formatIcsDateTime(exam.examDate, exam.endTime)}`));
     lines.push(foldLine(`SUMMARY:${escapeText(summary)}`));
+    if (exam.rooms.length > 0) {
+      lines.push(foldLine(`LOCATION:${escapeText(exam.rooms.join(', '))}`));
+    }
     if (descriptionParts.length > 0) {
       lines.push(foldLine(`DESCRIPTION:${escapeText(descriptionParts.join('\\n'))}`));
     }
