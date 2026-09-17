@@ -3,6 +3,9 @@
  * Zusatzfeature im Projektauftrag und IDEEN.md B2: der Abo-Feed mit Server-Zugriff
  * ist bewusst ein separater, späterer Schritt, M11).
  *
+ * Grundlage sind Perioden mit lstype "ex" aus `getTimetable`, nicht `getExams` —
+ * siehe `domain/timetable.ts` (`examPeriods`) und IDEEN.md B3 für den Hintergrund.
+ *
  * Zeitzone: Die API liefert keine Zeitzoneninformation, nur Datum/Zeit in Lokalzeit
  * der Schule. Wir schreiben deshalb "floating time" (kein TZID, kein Z-Suffix) — die
  * meisten Kalenderprogramme interpretieren das als lokale Zeit des Geräts, was für
@@ -10,10 +13,11 @@
  */
 
 import { wuDateTimeToDate } from '../api/format';
-import type { Exam, WuDate, WuTime } from '../api/types';
+import type { Period, WuDate, WuTime } from '../api/types';
+import { examExtraText } from './timetable';
 
 export interface ExamIcsEntry {
-  exam: Exam;
+  period: Period;
   subjectName: string;
   klasseNames?: string[] | undefined;
 }
@@ -56,13 +60,13 @@ function formatIcsTimestampUtc(date: Date): string {
   );
 }
 
-/** Stabile UID je Prüfung — wichtig, damit ein erneuter Export/Import dieselbe Prüfung erkennt. */
-export function examUid(exam: Exam): string {
-  return `exam-${exam.id}@betterwebuntis.local`;
+/** Stabile UID je Prüfungs-Periode — wichtig, damit ein erneuter Export/Import dieselbe Prüfung erkennt. */
+export function examUid(period: Period): string {
+  return `exam-period-${period.id}@betterwebuntis.local`;
 }
 
 /**
- * Baut eine vollständige .ics-Datei aus einer Liste von Prüfungen.
+ * Baut eine vollständige .ics-Datei aus einer Liste von Prüfungs-Perioden.
  * `now` ist injizierbar für deterministische Tests.
  */
 export function buildExamsIcs(entries: readonly ExamIcsEntry[], now: Date = new Date()): string {
@@ -70,18 +74,18 @@ export function buildExamsIcs(entries: readonly ExamIcsEntry[], now: Date = new 
   const lines: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BetterWebUntis//Pruefungsexport//DE', 'CALSCALE:GREGORIAN'];
 
   for (const entry of entries) {
-    const { exam, subjectName, klasseNames } = entry;
+    const { period, subjectName, klasseNames } = entry;
     const summary = `${subjectName} — Prüfung`;
     const descriptionParts = [
       klasseNames !== undefined && klasseNames.length > 0 ? `Klasse: ${klasseNames.join(', ')}` : undefined,
-      `${exam.students.length} Schüler:innen`,
+      examExtraText(period),
     ].filter((p): p is string => p !== undefined);
 
     lines.push('BEGIN:VEVENT');
-    lines.push(foldLine(`UID:${examUid(exam)}`));
+    lines.push(foldLine(`UID:${examUid(period)}`));
     lines.push(foldLine(`DTSTAMP:${dtstamp}`));
-    lines.push(foldLine(`DTSTART:${formatIcsDateTime(exam.date, exam.startTime)}`));
-    lines.push(foldLine(`DTEND:${formatIcsDateTime(exam.date, exam.endTime)}`));
+    lines.push(foldLine(`DTSTART:${formatIcsDateTime(period.date, period.startTime)}`));
+    lines.push(foldLine(`DTEND:${formatIcsDateTime(period.date, period.endTime)}`));
     lines.push(foldLine(`SUMMARY:${escapeText(summary)}`));
     if (descriptionParts.length > 0) {
       lines.push(foldLine(`DESCRIPTION:${escapeText(descriptionParts.join('\\n'))}`));
