@@ -329,3 +329,24 @@ ist nicht geklärt — nur dass er vorkommt und die UI ihn jetzt nicht mehr kapu
 - [ ] `getTimetableWithAbsences`: sind `externalkey`s an dieser Schule überhaupt gepflegt? (kein Recht zum Prüfen bei diesem Konto)
 - [ ] Liefern Fächer/Klassen echte `foreColor`/`backColor`, oder greift bei dieser Schule durchgehend der generierte Fallback aus `domain/colors.ts`?
 - [ ] Was der ganztägige Eintrag ohne Fach/Raum inhaltlich bedeutet
+
+### Nutzer-Feedback 2026-09-17: Rechte-Schluss aus Abschnitt 3 war zu voreilig
+
+Der Nutzer hat Screenshots der echten, originalen WebUntis-Weboberfläche geschickt (eingeloggt
+mit demselben Schüler-Konto wie oben): Prüfungen und Abwesenheiten werden dort ganz normal
+angezeigt. Das widerspricht dem obigen "❌ nein" bei `getExamTypes`/`getTimetableWithAbsences`
+nicht direkt (diese beiden Methoden sind nachweislich gesperrt), zeigt aber, dass der Schluss
+"also ist das Feature für dieses Konto tot" falsch war — `getExams` selbst (eigenes Recht laut
+Doku, "examinations read", getrennt von "examtypes read") wurde nie getestet.
+
+`scripts/smoke-test.ts` wurde erweitert:
+- die Rechte-Tabelle zeigt jetzt den rohen Fehlercode, nicht nur ja/nein
+- ein neuer Durchlauf probiert `getExams` direkt mit den IDs 1–10, unabhängig von `getExamTypes`
+
+**Noch offen, braucht einen erneuten `npm run smoke`-Lauf vom Nutzer:**
+- [ ] Funktioniert `getExams` mit einer der geratenen IDs? Falls ja: Bug in `ExamsScreen.tsx`
+      (hängt aktuell hart von `getExamTypes` ab, siehe IDEEN.md B3), reiner Code-Fix.
+- [ ] Falls nein: `getExamTypes` und `getExams` sind beide gesperrt, ebenso `getTimetableWithAbsences`
+      → die originale Weboberfläche nutzt für diese Ansichten vermutlich die undokumentierte
+      REST-API statt JSON-RPC. Das wäre eine Grundsatzfrage (siehe IDEEN.md A1), keine, die sich
+      stillschweigend im Code lösen lässt.

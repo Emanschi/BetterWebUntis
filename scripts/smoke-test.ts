@@ -13,7 +13,17 @@
  * Der Test prueft, ob sich der echte Server so verhaelt wie die Doku von 2018 beschreibt,
  * und meldet Abweichungen. Ergebnisse gehoeren nach TESTING.md Abschnitt 3.
  */
-import { createWebUntisClient, api, describeError, formatWuDate, formatWuTime, toWuDate, wuWeekRange } from '../src/api/index';
+import {
+  createWebUntisClient,
+  api,
+  addWuDays,
+  describeError,
+  formatWuDate,
+  formatWuTime,
+  toWuDate,
+  wuWeekRange,
+  WebUntisRpcError,
+} from '../src/api/index';
 
 const user = process.env['WEBUNTIS_USER'];
 const password = process.env['WEBUNTIS_PASSWORD'];
@@ -91,6 +101,10 @@ try {
   }
 
   // --- 4) Rechte-Check: was darf dieses Konto? ---------------------------
+  // Wichtig: hier steht jetzt der rohe Fehlercode dabei, nicht nur OK/NEIN.
+  // Grund: "NEIN" allein sagt nicht, ob es wirklich ein Rechte-Fehler war
+  // (Code -8509) oder etwas anderes (z. B. ungueltige Parameter) — das wurde
+  // beim ersten Durchlauf (M10) nicht unterschieden.
   console.log('\nRechte dieses Kontos:');
   const optional: Array<[string, () => Promise<unknown>]> = [
     ['getKlassen', () => api.getKlassen(client)],
@@ -113,8 +127,37 @@ try {
       const size = Array.isArray(result) ? `${result.length} Eintraege` : typeof result;
       console.log(`  JA   ${name} — ${size}`);
     } catch (error) {
-      console.log(`  NEIN ${name} — ${describeError(error)}`);
+      const code = error instanceof WebUntisRpcError ? ` [Code ${error.code}]` : '';
+      console.log(`  NEIN ${name}${code} — ${describeError(error)}`);
     }
+  }
+
+  // --- 4b) getExams direkt probieren -------------------------------------
+  // getExamTypes ("examtypes read") und getExams ("examinations read") sind
+  // laut Doku ZWEI verschiedene Rechte. Der erste Durchlauf (M10) hat nur
+  // getExamTypes getestet und daraus geschlossen, dass Pruefungen fuer dieses
+  // Konto generell nicht gehen — das war ein Fehlschluss, siehe IDEEN.md B3.
+  // Die original WebUntis-Weboberflaeche zeigt Pruefungen fuer genau dieses
+  // Konto an, das Recht muss also irgendwie vorhanden sein. Da getExamTypes
+  // (zum Ermitteln gueltiger IDs) fehlt, wird hier einfach eine Handvoll
+  // ueblicher IDs durchprobiert.
+  console.log('\ngetExams direkt (ohne getExamTypes), IDs 1..10 durchprobiert:');
+  let anyExamTypeWorked = false;
+  for (let examTypeId = 1; examTypeId <= 10; examTypeId += 1) {
+    try {
+      const exams = await api.getExams(client, { examTypeId, startDate: addWuDays(startDate, -180), endDate: addWuDays(endDate, 180) });
+      console.log(`  JA   examTypeId=${examTypeId} — ${exams.length} Eintraege`);
+      anyExamTypeWorked = true;
+    } catch (error) {
+      const code = error instanceof WebUntisRpcError ? error.code : undefined;
+      // Bei "ungueltige examTypeId" antwortet der Server vermutlich anders als
+      // bei "kein Recht" — beides wird hier sichtbar, nicht verschluckt.
+      console.log(`  NEIN examTypeId=${examTypeId} — ${describeError(error)}${code === undefined ? '' : ` [Code ${code}]`}`);
+    }
+  }
+  if (!anyExamTypeWorked) {
+    console.log('  -> keine der IDs 1..10 hat funktioniert. Entweder ist die Liste zu kurz,');
+    console.log('     oder "examinations read" fehlt diesem Konto tatsaechlich auch.');
   }
 
   // --- 5) logout ---------------------------------------------------------

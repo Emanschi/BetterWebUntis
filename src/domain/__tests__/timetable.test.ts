@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  appointmentPeriods,
   buildWeekGrid,
   computeTimeBounds,
   DEFAULT_TIME_BOUNDS,
@@ -165,34 +164,6 @@ describe('buildWeekGrid', () => {
     ];
     const grid = buildWeekGrid(periods, 20260907);
     expect(computeTimeBounds(grid)).toEqual({ startMinutes: 8 * 60, endMinutes: 9 * 60 + 60 }); // 08:00–10:00 (aufgerundet)
-  });
-});
-
-describe('appointmentPeriods', () => {
-  it('filtert auf oh/sb/bs und laesst normalen Unterricht weg', () => {
-    const periods = [
-      period({ id: 1, date: 20260908, startTime: 1150, endTime: 1240, lstype: 'oh', te: [{ id: 11 }] }),
-      period({ id: 2, date: 20260907, startTime: 800, endTime: 850 }), // normale Stunde, kein lstype
-      period({ id: 3, date: 20260911, startTime: 1150, endTime: 1240, lstype: 'sb' }),
-      period({ id: 4, date: 20260910, startTime: 1000, endTime: 1050, lstype: 'ex' }), // Pruefung zaehlt nicht
-    ];
-    const result = appointmentPeriods(periods);
-    expect(result.map((p) => p.id)).toEqual([1, 3]);
-  });
-
-  it('sortiert chronologisch, unabhaengig von der Eingabereihenfolge', () => {
-    const periods = [
-      period({ id: 10, date: 20260918, startTime: 1150, endTime: 1240, lstype: 'oh' }),
-      period({ id: 11, date: 20260908, startTime: 1150, endTime: 1240, lstype: 'oh' }),
-      period({ id: 12, date: 20260908, startTime: 800, endTime: 850, lstype: 'sb' }),
-    ];
-    const result = appointmentPeriods(periods);
-    expect(result.map((p) => p.id)).toEqual([12, 11, 10]);
-  });
-
-  it('liefert eine leere Liste, wenn nichts passt', () => {
-    const periods = [period({ id: 1, date: 20260907, startTime: 800, endTime: 850 })];
-    expect(appointmentPeriods(periods)).toEqual([]);
   });
 });
 

@@ -81,25 +81,3 @@ describe('Prüfungen (M7)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht die nötigen Rechte');
   });
 });
-
-describe('Meine Termine (M7)', () => {
-  it('Lehrer-Konto sieht die Sprechstunde', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await loginAs(user, 'aschmidt', 'test1234');
-
-    await user.click(screen.getByRole('link', { name: 'Termine' }));
-
-    expect((await screen.findAllByText('Sprechstunde')).length).toBeGreaterThan(0);
-  });
-
-  it('Schueler-Konto ohne eigene Sprechstunden sieht den Leer-Hinweis', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await loginAs(user, 'mmuster', 'test1234');
-
-    await user.click(screen.getByRole('link', { name: 'Termine' }));
-
-    expect(await screen.findByText(/Keine Sprechstunden/)).toBeInTheDocument();
-  });
-});

@@ -20,6 +20,7 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | M8 ICS-Export | ✅ 199 Tests |
 | Kalender-Nachbesserung (Zeitraster, Theme-Toggle) | ✅ 207 Tests |
 | M10 Echter Server-Test | ✅ 215 Tests, 2 Bugs gefunden+behoben |
+| Nutzer-Feedback: Scope auf Schüler-Konten, "Termine"/"Profil" entfernt | ✅ 210 Tests |
 | M9, M11 | offen |
 
 ## Befehle

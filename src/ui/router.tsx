@@ -5,8 +5,6 @@ import { TimetableScreen } from './screens/TimetableScreen';
 import { TimetableRouteScreen } from './screens/TimetableRouteScreen';
 import { AbsencesScreen } from './screens/AbsencesScreen';
 import { ExamsScreen } from './screens/ExamsScreen';
-import { AppointmentsScreen } from './screens/AppointmentsScreen';
-import { ProfileScreen } from './screens/ProfileScreen';
 
 /**
  * HashRouter statt BrowserRouter: die Produktions-Auslieferung läuft über einen
@@ -24,8 +22,6 @@ export function AppRouter() {
           <Route path="/timetable/:segment/:id" element={<TimetableRouteScreen />} />
           <Route path="/absences" element={<AbsencesScreen />} />
           <Route path="/exams" element={<ExamsScreen />} />
-          <Route path="/appointments" element={<AppointmentsScreen />} />
-          <Route path="/profile" element={<ProfileScreen />} />
         </Route>
         <Route path="*" element={<Navigate to="/timetable" replace />} />
       </Routes>
