@@ -34,11 +34,29 @@ afterEach(() => {
   });
 });
 
-function renderScreen() {
+/** sessionStore.login baut selbst einen Client per Proxy-Pfad — fuer den Test nutzen wir
+ * stattdessen createSessionStore mit Test-Client (wie in sessionStore.test.ts). */
+async function loginAsStudent() {
+  const { createSessionStore } = await import('../../../state/sessionStore');
+  const testStore = createSessionStore({
+    buildClient: (school) =>
+      new WebUntisClient({
+        endpoint: 'https://mock.local/WebUntis/jsonrpc.do',
+        school,
+        client: 'BetterWebUntis-Test',
+        transport: new FetchTransport({ canSetCookieHeader: true }),
+        minRequestGapMs: 0,
+      }),
+  });
+  await testStore.getState().login('mockschule', 'mmuster', 'test1234');
+  useSessionStore.setState(testStore.getState());
+}
+
+function renderScreen(initialPath = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialPath]}>
         <TimetableScreen />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -47,23 +65,7 @@ function renderScreen() {
 
 describe('TimetableScreen', () => {
   it('zeigt Ladeanzeige, dann den Stundenplan der aktuellen Woche', async () => {
-    // sessionStore.login baut selbst einen Client per Proxy-Pfad — fuer den Test nutzen
-    // wir stattdessen createSessionStore mit Test-Client (wie in sessionStore.test.ts).
-    const { createSessionStore } = await import('../../../state/sessionStore');
-    const testStore = createSessionStore({
-      buildClient: (school) =>
-        new WebUntisClient({
-          endpoint: 'https://mock.local/WebUntis/jsonrpc.do',
-          school,
-          client: 'BetterWebUntis-Test',
-          transport: new FetchTransport({ canSetCookieHeader: true }),
-          minRequestGapMs: 0,
-        }),
-    });
-    await testStore.getState().login('mockschule', 'mmuster', 'test1234');
-
-    useSessionStore.setState(testStore.getState());
-
+    await loginAsStudent();
     renderScreen();
 
     expect(screen.getByText('Stundenplan wird geladen…')).toBeInTheDocument();
@@ -101,20 +103,7 @@ describe('TimetableScreen', () => {
     // Nutzerwunsch 2026-09-17: Elemente des Stundenplans sollen sich oeffnen lassen, um
     // laengere Infos zu sehen (siehe TimetableBlockCard.tsx onOpen, PeriodDetail.tsx).
     const user = userEvent.setup();
-    const { createSessionStore } = await import('../../../state/sessionStore');
-    const testStore = createSessionStore({
-      buildClient: (school) =>
-        new WebUntisClient({
-          endpoint: 'https://mock.local/WebUntis/jsonrpc.do',
-          school,
-          client: 'BetterWebUntis-Test',
-          transport: new FetchTransport({ canSetCookieHeader: true }),
-          minRequestGapMs: 0,
-        }),
-    });
-    await testStore.getState().login('mockschule', 'mmuster', 'test1234');
-    useSessionStore.setState(testStore.getState());
-
+    await loginAsStudent();
     renderScreen();
     await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
 
@@ -132,27 +121,75 @@ describe('TimetableScreen', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('zeigt einen Buchungshinweis in der Detailansicht, wenn showBooking Daten liefert', async () => {
+    // Nutzerwunsch 2026-09-17: "Lehrer koennen Lehrstoff oder Notizen eintragen". Das
+    // einzige dafuer dokumentierte Stundenplan-Feld ist bkText/bkRemark (showBooking,
+    // Doku Abschnitt 15) — mock/timetable.ts bildet das auf dem Dienstag-BSP-Slot nach
+    // (siehe IDEEN.md B7 zur Einordnung, ob das wirklich "Lehrstoff" ist).
+    const user = userEvent.setup();
+    await loginAsStudent();
+    renderScreen();
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+
+    const cards = await screen.findAllByRole('button', { name: /BSP/ });
+    await user.click(cards[0]!);
+
+    expect(await screen.findByText('Halle 2 reserviert')).toBeInTheDocument();
+    expect(screen.getByText('Geräte bitte danach wieder wegräumen')).toBeInTheDocument();
+  });
+
   it('öffnet auch einen ganztägigen Eintrag per Klick', async () => {
     const user = userEvent.setup();
-    const { createSessionStore } = await import('../../../state/sessionStore');
-    const testStore = createSessionStore({
-      buildClient: (school) =>
-        new WebUntisClient({
-          endpoint: 'https://mock.local/WebUntis/jsonrpc.do',
-          school,
-          client: 'BetterWebUntis-Test',
-          transport: new FetchTransport({ canSetCookieHeader: true }),
-          minRequestGapMs: 0,
-        }),
-    });
-    await testStore.getState().login('mockschule', 'mmuster', 'test1234');
-    useSessionStore.setState(testStore.getState());
-
+    await loginAsStudent();
     renderScreen();
     await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
 
     await user.click(await screen.findByText('Schulveranstaltung (ganztägig)'));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('kann zwischen Wochen- und Tagesansicht wechseln (Nutzerwunsch 2026-09-17)', async () => {
+    const user = userEvent.setup();
+    await loginAsStudent();
+    renderScreen();
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+
+    // Woche ist der Default: alle fuenf Wochentage sichtbar.
+    expect(screen.getByText(/^Mo ·/)).toBeInTheDocument();
+    expect(screen.getByText(/^Mi ·/)).toBeInTheDocument();
+    expect(screen.getByText(/^Fr ·/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Tag' }));
+
+    // "Heute" ist auf Mittwoch, 09.09.2026 gepinnt — nur noch dieser eine Tag sichtbar.
+    expect(screen.getByText(/^Mi ·/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Mo ·/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Fr ·/)).not.toBeInTheDocument();
+
+    // Navigation bewegt jetzt einen Tag statt einer Woche.
+    await user.click(screen.getByRole('button', { name: 'Nächster Tag' }));
+    expect(await screen.findByText(/^Do ·/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Mi ·/)).not.toBeInTheDocument();
+
+    // Zurueck zur Woche zeigt wieder alle Tage.
+    await user.click(screen.getByRole('tab', { name: 'Woche' }));
+    expect(await screen.findByText(/^Mo ·/)).toBeInTheDocument();
+    expect(screen.getByText(/^Fr ·/)).toBeInTheDocument();
+  });
+
+  it('springt beim Ankommen mit highlightDate zur passenden Woche und hebt die Stunde hervor', async () => {
+    // Simuliert den Klick auf eine Pruefung in ExamsScreen.tsx: 2. Schularbeit am
+    // 19.11.2026, 10:00-10:50 (siehe mock/timetable.ts FIXED_EXAM_DATES).
+    await loginAsStudent();
+    renderScreen('/?highlightDate=20261119&highlightStart=1000&highlightEnd=1050');
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+
+    // Die Woche um den 19.11.2026 ist geladen, nicht die aktuelle (September-)Woche.
+    expect(await screen.findByText(/16\.11\. – 22\.11\.2026/)).toBeInTheDocument();
+
+    const highlighted = document.querySelector('.bwu-neon-highlight');
+    expect(highlighted).not.toBeNull();
+    expect(highlighted?.textContent).toContain('AM');
   });
 });

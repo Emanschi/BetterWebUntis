@@ -26,6 +26,7 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | Abwesenheiten: derselbe Weg, Tab wieder da | ✅ 231 Tests |
 | Elementwechsel: nur noch Klassen (Lehrer/Fach/Raum entfernt) | ✅ 231 Tests |
 | Kalender-Redesign: gefüllte Fach-Karten, Detailansicht, Fachfarben-Einstellungen | ✅ 250 Tests |
+| Nachbesserung: Settings-Fix (-8507), Buchungshinweis, Prüfungs-Sprung, Tages-/Wochenansicht | ✅ 257 Tests |
 | M9, M11 | offen |
 
 ## Befehle

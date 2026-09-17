@@ -80,6 +80,7 @@ try {
     showSubstText: true,
     showLsText: true,
     showStudentgroup: true,
+    showBooking: true,
     subjectFields: ['id', 'name', 'longname'],
     teacherFields: ['id', 'name'],
     roomFields: ['id', 'name'],
@@ -98,6 +99,13 @@ try {
         `${first.su?.[0]?.name ?? '?'} / ${first.ro?.[0]?.name ?? '?'}${first.code === undefined ? '' : ` [${first.code}]`}`,
     );
     check('benannte Felder kommen an (subjectFields)', first.su?.[0]?.name !== undefined);
+  }
+
+  // showBooking (Doku Abschnitt 15) — ungeprueft, ob diese Schule das ueberhaupt befuellt.
+  const withBooking = periods.filter((p) => p.bkText !== undefined || p.bkRemark !== undefined);
+  console.log(`        showBooking: ${withBooking.length} von ${periods.length} Perioden mit bkText/bkRemark`);
+  for (const p of withBooking.slice(0, 3)) {
+    console.log(`          ${formatWuDate(p.date)} ${formatWuTime(p.startTime)} — bkText="${p.bkText ?? ''}" bkRemark="${p.bkRemark ?? ''}"`);
   }
 
   // --- 4) Rechte-Check: was darf dieses Konto? ---------------------------
@@ -119,6 +127,12 @@ try {
     ['getSubstitutions', () => api.getSubstitutions(client, { startDate, endDate, departmentId: 0 })],
     ['getTimetableWithAbsences', () => api.getTimetableWithAbsences(client, { startDate, endDate })],
     ['getClassregCategories', () => api.getClassregCategories(client)],
+    // Nie gemessen (Luecke, gefunden 2026-09-17): mock/accounts.ts nimmt seit M3 an, dass
+    // Schueler-Konten hier kein Recht haben (PLAN.md R4), aber das war nie am echten Server
+    // verifiziert wie die anderen Zeilen hier. Relevant fuer "Lehrstoff/Notizen pro Stunde" —
+    // die naheliegende WebUntis-Antwort darauf ist das Klassenbuch (Doku Abschnitt 20), nicht
+    // ein Feld am Stundenplan selbst. Siehe IDEEN.md.
+    ['getClassregEvents', () => api.getClassregEvents(client, { startDate, endDate })],
     ['getLatestImportTime', () => api.getLatestImportTime(client)],
   ];
   for (const [name, call] of optional) {

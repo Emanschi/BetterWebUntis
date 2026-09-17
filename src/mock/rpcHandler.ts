@@ -115,6 +115,17 @@ function asElement(value: unknown): MockElement | undefined {
   return { id: obj['id'], type: obj['type'] as MockElement['type'] };
 }
 
+/**
+ * Gemessen am echten Server (2026-09-17, siehe TESTING.md): `getTimetable` lehnt einen
+ * Zeitraum ab, der nicht komplett in einem einzigen Schuljahr liegt (Code -8507). Nur für
+ * `getTimetable` nachgebildet, weil nur dort gemessen — ob dieselbe Regel auch für andere
+ * Methoden mit Zeitraum gilt (`getSubstitutions`, `getExams`, `getTimetableWithAbsences`),
+ * ist unbekannt und wird nicht angenommen.
+ */
+function withinSingleSchoolyear(startDate: WuDate, endDate: WuDate): boolean {
+  return SCHOOLYEARS.some((year) => startDate >= year.startDate && endDate <= year.endDate);
+}
+
 // ---------------------------------------------------------------------------
 // Dispatcher
 // ---------------------------------------------------------------------------
@@ -209,12 +220,16 @@ export function handleRpc(state: MockServerState, currentSessionId: string | und
         if (element === undefined) return fail(id, JsonRpcErrorCode.INVALID_PARAMS, 'element fehlt oder ungueltig');
         const startDate = asWuDate(options['startDate'], today());
         const endDate = asWuDate(options['endDate'], today());
+        if (!withinSingleSchoolyear(startDate, endDate)) {
+          return fail(id, WebUntisErrorCode.NOT_WITHIN_SINGLE_SCHOOLYEAR, 'startDate and endDate are not within a single school year');
+        }
         const renderOptions: RenderOptions = {
           showInfo: options['showInfo'] as boolean | undefined,
           showSubstText: options['showSubstText'] as boolean | undefined,
           showLsText: options['showLsText'] as boolean | undefined,
           showLsNumber: options['showLsNumber'] as boolean | undefined,
           showStudentgroup: options['showStudentgroup'] as boolean | undefined,
+          showBooking: options['showBooking'] as boolean | undefined,
           klasseFields: options['klasseFields'] as RenderOptions['klasseFields'],
           roomFields: options['roomFields'] as RenderOptions['roomFields'],
           subjectFields: options['subjectFields'] as RenderOptions['subjectFields'],
@@ -228,6 +243,9 @@ export function handleRpc(state: MockServerState, currentSessionId: string | und
       if (element === undefined) return fail(id, JsonRpcErrorCode.INVALID_PARAMS, 'id/type fehlt oder ungueltig');
       const startDate = asWuDate(p['startDate'], today());
       const endDate = asWuDate(p['endDate'], today());
+      if (!withinSingleSchoolyear(startDate, endDate)) {
+        return fail(id, WebUntisErrorCode.NOT_WITHIN_SINGLE_SCHOOLYEAR, 'startDate and endDate are not within a single school year');
+      }
       const raw = rawPeriodsForElement(element, startDate, endDate);
       return ok(id, raw.map(toSimplePeriod));
     }

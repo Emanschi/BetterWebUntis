@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useSessionStore } from '../../state/sessionStore';
 import { api, restApi } from '../../api/index';
 import { formatWuDate, formatWuTime, wuTimeToMinutes } from '../../api/format';
@@ -40,10 +41,24 @@ function downloadIcsFile(filename: string, content: string): void {
  *
  * ICS-Export (M8): rein clientseitig, kein Server nötig (anders als der spätere
  * Kalenderabo-Feed aus M11, siehe IDEEN.md B2).
+ *
+ * Klick auf eine Prüfung springt im Stundenplan direkt zur passenden Woche und hebt die
+ * Stunde kurz hervor (Nutzerwunsch 2026-09-17) — siehe TimetableScreen.tsx, das die
+ * `highlightDate`/`highlightStart`/`highlightEnd`-Query-Parameter ausliest.
  */
 export function ExamsScreen() {
   const client = useSessionStore((s) => s.client);
   const personId = useSessionStore((s) => s.personId);
+  const navigate = useNavigate();
+
+  function showInTimetable(exam: RestExam): void {
+    const params = new URLSearchParams({
+      highlightDate: String(exam.examDate),
+      highlightStart: String(exam.startTime),
+      highlightEnd: String(exam.endTime),
+    });
+    navigate(`/timetable?${params.toString()}`);
+  }
 
   const schoolyearsQuery = useQuery({
     queryKey: ['schoolyears'],
@@ -109,7 +124,20 @@ export function ExamsScreen() {
           {examsQuery.data.map((exam: RestExam) => {
             const durationMinutes = wuTimeToMinutes(exam.endTime) - wuTimeToMinutes(exam.startTime);
             return (
-              <Card key={`${exam.examDate}-${exam.startTime}-${exam.subject}`} className="flex flex-col gap-1 text-sm">
+              <Card
+                key={`${exam.examDate}-${exam.startTime}-${exam.subject}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => showInTimetable(exam)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    showInTimetable(exam);
+                  }
+                }}
+                title="Im Stundenplan anzeigen"
+                className="flex cursor-pointer flex-col gap-1 text-sm transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span className="font-medium text-fg">
                     {exam.subject || exam.name}
@@ -129,6 +157,7 @@ export function ExamsScreen() {
                   </div>
                 )}
                 {exam.grade !== '' && <div className="font-medium text-fg">Note: {exam.grade}</div>}
+                <div className="text-xs text-accent">Im Stundenplan anzeigen →</div>
               </Card>
             );
           })}

@@ -1,9 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useSessionStore } from '../../state/sessionStore';
 import { api } from '../../api/index';
-import { addWuDays, formatWuDate, formatWuTime, minutesToWuTime, toWuDate, wuTimeToMinutes, wuWeekRange } from '../../api/format';
+import {
+  addWuDays,
+  formatWuDate,
+  formatWuTime,
+  minutesToWuTime,
+  toWuDate,
+  wuDateToDate,
+  wuTimeToMinutes,
+  wuWeekRange,
+} from '../../api/format';
 import type { ElementType } from '../../api/types';
 import {
   buildWeekGrid,
@@ -23,13 +32,26 @@ import { PeriodDetail } from '../components/PeriodDetail';
 import { Spinner } from '../components/Spinner';
 import { blockTitle, TimetableBlockCard } from '../components/TimetableBlockCard';
 
-const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr'];
+const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
-/** Geteilt zwischen der Ganztags-Zeile und dem Zeitraster, damit Spalten exakt fluchten. */
-const GRID_TEMPLATE_COLUMNS = '3.25rem repeat(5, minmax(0, 1fr))';
+/** Geteilt zwischen der Ganztags-Zeile und dem Zeitraster einer Woche, damit Spalten exakt fluchten. */
+const WEEK_GRID_TEMPLATE_COLUMNS = '3.25rem repeat(5, minmax(0, 1fr))';
+/** Tagesansicht: Zeitachse + genau eine Spalte. */
+const DAY_GRID_TEMPLATE_COLUMNS = '3.25rem minmax(0, 1fr)';
 
 /** Höhe je Minute im Zeitraster — 2px/Min. ergibt z. B. 90px für eine 45-Minuten-Stunde. */
 const PX_PER_MINUTE = 2;
+
+/** Wie lange der Neon-Rahmen leuchtet, siehe index.css `.bwu-neon-highlight` (0.7s × 4 ≈ 2.8s Animation). */
+const HIGHLIGHT_DURATION_MS = 3200;
+
+/** Mo–So-Kürzel für ein Datum — JS `getDay()` zählt ab Sonntag (0), unser Raster ab Montag. */
+function weekdayLabel(date: TimetableDay['date']): string {
+  const jsDay = wuDateToDate(date).getDay();
+  return WEEKDAY_LABELS[(jsDay + 6) % 7] ?? '';
+}
+
+type ViewMode = 'week' | 'day';
 
 export interface TimetableElementRef {
   id: number | string;
@@ -43,22 +65,48 @@ interface TimetableScreenProps {
 }
 
 /**
- * Zeigt den Stundenplan einer Woche für ein Element (Standard: die eigene Person) als
- * echtes Zeitraster — eine gemeinsame Stunden-Achse links, Perioden nach Startzeit und
- * Dauer positioniert, statt einer losen Kartenliste. So sind Uhrzeiten, Lücken
- * (Freistunden) und Überschneidungen auf einen Blick erkennbar.
+ * Zeigt den Stundenplan einer Woche (oder eines einzelnen Tages, umschaltbar) für ein
+ * Element (Standard: die eigene Person) als echtes Zeitraster — eine gemeinsame Stunden-
+ * Achse links, Perioden nach Startzeit und Dauer positioniert, statt einer losen
+ * Kartenliste. So sind Uhrzeiten, Lücken (Freistunden) und Überschneidungen auf einen
+ * Blick erkennbar.
  *
  * Holt `getTimetable` (customizable) und `getSubstitutions` parallel und merged sie
- * über `domain/timetable.ts` zu einem Wochenraster (Doppelstunden, Randfälle).
+ * über `domain/timetable.ts` zu einem Wochenraster (Doppelstunden, Randfälle). Die
+ * Tagesansicht (Nutzerwunsch 2026-09-17) zeigt daraus nur einen Tag — kein separater
+ * Request, die Wochendaten reichen.
+ *
+ * "Wo steht das in der Woche?" (Nutzerwunsch 2026-09-17): mit `?highlightDate=…&
+ * highlightStart=…&highlightEnd=…` in der URL springt der Screen direkt zur passenden
+ * Woche/zum passenden Tag und hebt die Stunde kurz hervor — siehe ExamsScreen.tsx, das
+ * diese Parameter beim Klick auf eine Prüfung setzt.
  */
 export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }: TimetableScreenProps) {
   const client = useSessionStore((s) => s.client);
   const personType = useSessionStore((s) => s.personType);
   const personId = useSessionStore((s) => s.personId);
 
-  const [weekStart, setWeekStart] = useState(() => wuWeekRange(toWuDate(new Date())).startDate);
+  const [searchParams] = useSearchParams();
+  const highlightDateParam = searchParams.get('highlightDate');
+  const highlightStartParam = searchParams.get('highlightStart');
+  const highlightEndParam = searchParams.get('highlightEnd');
+
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const parsed = highlightDateParam !== null ? Number(highlightDateParam) : NaN;
+    return Number.isNaN(parsed) ? toWuDate(new Date()) : parsed;
+  });
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [openBlock, setOpenBlock] = useState<TimetableBlock | null>(null);
+  const [highlightActive, setHighlightActive] = useState(highlightDateParam !== null);
+
+  useEffect(() => {
+    if (!highlightActive) return;
+    const timer = setTimeout(() => setHighlightActive(false), HIGHLIGHT_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [highlightActive]);
+
+  const weekStart = wuWeekRange(selectedDate).startDate;
   const weekEnd = addWuDays(weekStart, 6);
 
   const ownElement =
@@ -81,6 +129,7 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
           showSubstText: true,
           showLsText: true,
           showStudentgroup: true,
+          showBooking: true,
           subjectFields: ['id', 'name', 'longname'],
           teacherFields: ['id', 'name', 'longname'],
           roomFields: ['id', 'name', 'longname'],
@@ -97,7 +146,40 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
 
   const grid = useMemo(() => buildWeekGrid(query.data ?? [], weekStart), [query.data, weekStart]);
   const weekDays = useMemo(() => grid.slice(0, 5), [grid]);
-  const bounds = useMemo(() => computeTimeBounds(weekDays), [weekDays]);
+  const selectedDay = useMemo(() => grid.find((d) => d.date === selectedDate), [grid, selectedDate]);
+  const visibleDays = viewMode === 'week' ? weekDays : selectedDay !== undefined ? [selectedDay] : [];
+  const bounds = useMemo(() => computeTimeBounds(visibleDays), [visibleDays]);
+
+  const highlightMatch = useMemo(() => {
+    if (highlightDateParam === null || highlightStartParam === null || highlightEndParam === null) return undefined;
+    const date = Number(highlightDateParam);
+    const start = Number(highlightStartParam);
+    const end = Number(highlightEndParam);
+    for (const day of grid) {
+      if (day.date !== date) continue;
+      for (const block of [...day.blocks, ...day.allDayBlocks]) {
+        if (block.startTime < end && block.endTime > start) return block.periodIds.join('-');
+      }
+    }
+    return undefined;
+  }, [grid, highlightDateParam, highlightStartParam, highlightEndParam]);
+
+  useEffect(() => {
+    if (highlightMatch === undefined) return;
+    const el = document.getElementById(`bwu-block-${highlightMatch}`);
+    // scrollIntoView fehlt in manchen Testumgebungen (jsdom) komplett — defensiv, nicht
+    // nur fuer Tests: schadet auch in echten, sehr alten WebViews nicht.
+    if (el !== null && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlightMatch]);
+
+  function goPrev(): void {
+    setSelectedDate((d) => addWuDays(d, viewMode === 'week' ? -7 : -1));
+  }
+  function goNext(): void {
+    setSelectedDate((d) => addWuDays(d, viewMode === 'week' ? 7 : 1));
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -110,15 +192,40 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
             </Link>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => setWeekStart((w) => addWuDays(w, -7))} aria-label="Vorige Woche">
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="tablist" aria-label="Ansicht" className="flex gap-1 rounded-lg border border-border p-0.5">
+            {(['woche', 'tag'] as const).map((key) => {
+              const mode: ViewMode = key === 'woche' ? 'week' : 'day';
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`rounded-md px-2.5 py-1 text-sm font-medium transition-colors ${
+                    viewMode === mode ? 'bg-accent text-accent-fg' : 'text-fg-muted hover:bg-surface-hover'
+                  }`}
+                >
+                  {key === 'woche' ? 'Woche' : 'Tag'}
+                </button>
+              );
+            })}
+          </div>
+          <Button variant="secondary" onClick={goPrev} aria-label={viewMode === 'week' ? 'Vorige Woche' : 'Vorheriger Tag'}>
             ←
           </Button>
           <span className="text-sm text-fg-muted">
-            {formatWuDate(weekStart, 'de-AT', { day: '2-digit', month: '2-digit' })} –{' '}
-            {formatWuDate(weekEnd, 'de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+            {viewMode === 'week' ? (
+              <>
+                {formatWuDate(weekStart, 'de-AT', { day: '2-digit', month: '2-digit' })} –{' '}
+                {formatWuDate(weekEnd, 'de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </>
+            ) : (
+              formatWuDate(selectedDate, 'de-AT', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })
+            )}
           </span>
-          <Button variant="secondary" onClick={() => setWeekStart((w) => addWuDays(w, 7))} aria-label="Nächste Woche">
+          <Button variant="secondary" onClick={goNext} aria-label={viewMode === 'week' ? 'Nächste Woche' : 'Nächster Tag'}>
             →
           </Button>
           <Button variant="secondary" onClick={() => setPickerOpen((open) => !open)} aria-expanded={pickerOpen}>
@@ -137,30 +244,39 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
       {query.isPending && element !== undefined && <Spinner label="Stundenplan wird geladen…" />}
       {query.isError && <ErrorState error={query.error} />}
 
-      {query.isSuccess && (
+      {query.isSuccess && viewMode === 'day' && selectedDay === undefined && (
+        <ErrorState error="Kein Tag im geladenen Zeitraum gefunden." />
+      )}
+
+      {query.isSuccess && (viewMode === 'week' || selectedDay !== undefined) && (
         <div className="overflow-x-auto pb-2">
-          <div className="min-w-[820px]">
-            {weekDays.some((d) => d.allDayBlocks.length > 0) && (
+          <div className={viewMode === 'week' ? 'min-w-[820px]' : 'min-w-[320px]'}>
+            {visibleDays.some((d) => d.allDayBlocks.length > 0) && (
               // Eigene Zeile für ganztägige Einträge, mit demselben Spaltenraster wie das
               // Zeitraster darunter — so bleiben die Spalten pixelgenau ausgerichtet, auch
               // wenn nur ein einzelner Tag so einen Eintrag hat (siehe DayGridColumn).
               <div
                 className="mb-1.5 grid gap-1.5"
-                style={{ gridTemplateColumns: GRID_TEMPLATE_COLUMNS }}
+                style={{ gridTemplateColumns: viewMode === 'week' ? WEEK_GRID_TEMPLATE_COLUMNS : DAY_GRID_TEMPLATE_COLUMNS }}
                 aria-label="Ganztägige Einträge"
               >
                 <div aria-hidden="true" />
-                {weekDays.map((day) => (
+                {visibleDays.map((day) => (
                   <div key={day.date} className="flex min-w-0 flex-col gap-1">
                     {day.allDayBlocks.map((block) => {
                       const text = block.substText ?? block.info ?? block.lstext ?? 'Ganztägiger Eintrag';
+                      const key = block.periodIds.join('-');
+                      const isHighlighted = highlightActive && key === highlightMatch;
                       return (
                         <button
-                          key={block.periodIds.join('-')}
+                          key={key}
+                          id={`bwu-block-${key}`}
                           type="button"
                           title={text}
                           onClick={() => setOpenBlock(block)}
-                          className="truncate rounded-md border border-border bg-surface-hover px-2 py-1 text-left text-[10px] font-medium text-fg-muted hover:bg-border"
+                          className={`truncate rounded-md border border-border bg-surface-hover px-2 py-1 text-left text-[10px] font-medium text-fg-muted hover:bg-border ${
+                            isHighlighted ? 'bwu-neon-highlight' : ''
+                          }`}
                         >
                           {text}
                         </button>
@@ -171,10 +287,21 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
               </div>
             )}
 
-            <div className="grid gap-1.5" style={{ gridTemplateColumns: GRID_TEMPLATE_COLUMNS }}>
+            <div
+              className="grid gap-1.5"
+              style={{ gridTemplateColumns: viewMode === 'week' ? WEEK_GRID_TEMPLATE_COLUMNS : DAY_GRID_TEMPLATE_COLUMNS }}
+            >
               <TimeAxis bounds={bounds} />
-              {weekDays.map((day, i) => (
-                <DayGridColumn key={day.date} label={WEEKDAY_LABELS[i] ?? ''} day={day} bounds={bounds} onOpenBlock={setOpenBlock} />
+              {visibleDays.map((day) => (
+                <DayGridColumn
+                  key={day.date}
+                  label={weekdayLabel(day.date)}
+                  day={day}
+                  bounds={bounds}
+                  onOpenBlock={setOpenBlock}
+                  highlightActive={highlightActive}
+                  highlightKey={highlightMatch}
+                />
               ))}
             </div>
           </div>
@@ -215,9 +342,11 @@ interface DayGridColumnProps {
   day: TimetableDay;
   bounds: TimeBounds;
   onOpenBlock: (block: TimetableBlock) => void;
+  highlightActive: boolean;
+  highlightKey: string | undefined;
 }
 
-function DayGridColumn({ label, day, bounds, onOpenBlock }: DayGridColumnProps) {
+function DayGridColumn({ label, day, bounds, onOpenBlock, highlightActive, highlightKey }: DayGridColumnProps) {
   const totalMinutes = bounds.endMinutes - bounds.startMinutes;
   return (
     <div className="flex min-w-0 flex-col">
@@ -232,15 +361,21 @@ function DayGridColumn({ label, day, bounds, onOpenBlock }: DayGridColumnProps) 
             style={{ top: (minute - bounds.startMinutes) * PX_PER_MINUTE }}
           />
         ))}
+        {day.blocks.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-fg-muted">
+            Keine Perioden an diesem Tag.
+          </div>
+        )}
         {day.blocks.map((block) => {
           const top = (wuTimeToMinutes(block.startTime) - bounds.startMinutes) * PX_PER_MINUTE;
           const height = Math.max(
             (wuTimeToMinutes(block.endTime) - wuTimeToMinutes(block.startTime)) * PX_PER_MINUTE,
             30,
           );
+          const key = block.periodIds.join('-');
           return (
-            <div key={block.periodIds.join('-')} className="absolute inset-x-0.5" style={{ top, height }}>
-              <TimetableBlockCard block={block} dense onOpen={onOpenBlock} />
+            <div key={key} id={`bwu-block-${key}`} className="absolute inset-x-0.5" style={{ top, height }}>
+              <TimetableBlockCard block={block} dense onOpen={onOpenBlock} highlighted={highlightActive && key === highlightKey} />
             </div>
           );
         })}

@@ -26,6 +26,12 @@ interface TimetableBlockCardProps {
   dense?: boolean;
   /** Öffnet die Detailansicht (PeriodDetail in einem Modal) — siehe TimetableScreen.tsx. */
   onOpen?: (block: TimetableBlock) => void;
+  /**
+   * Kurzer Neon-Rahmen (siehe index.css `.bwu-neon-highlight`) — gesetzt, wenn von
+   * anderswo hierher gesprungen wurde (z. B. Klick auf eine Prüfung in ExamsScreen.tsx).
+   * Zeitgesteuertes An/Aus kommt von TimetableScreen.tsx, nicht von hier.
+   */
+  highlighted?: boolean;
 }
 
 /**
@@ -36,7 +42,7 @@ interface TimetableBlockCardProps {
  * Ein Klick öffnet die Detailansicht (`onOpen`), Entfall bleibt bewusst neutral/grau statt
  * farbig, damit "das findet nicht statt" auf den ersten Blick auffällt.
  */
-export function TimetableBlockCard({ block, dense = false, onOpen }: TimetableBlockCardProps) {
+export function TimetableBlockCard({ block, dense = false, onOpen, highlighted = false }: TimetableBlockCardProps) {
   const override = useSubjectColorStore((s) => (block.subject?.id !== undefined ? s.overrides[block.subject.id] : undefined));
   const cancelled = block.code === 'cancelled';
   const irregular = block.code === 'irregular';
@@ -56,7 +62,9 @@ export function TimetableBlockCard({ block, dense = false, onOpen }: TimetableBl
       aria-haspopup="dialog"
       className={`flex h-full w-full flex-col overflow-hidden rounded-lg text-left transition-shadow ${
         dense ? 'gap-0.5 p-1.5 text-[11px] leading-tight' : 'gap-1 p-2 text-xs'
-      } ${cancelled ? 'border border-border bg-surface-hover opacity-70' : 'shadow-sm hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent'}`}
+      } ${cancelled ? 'border border-border bg-surface-hover opacity-70' : 'shadow-sm hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent'} ${
+        highlighted ? 'bwu-neon-highlight' : ''
+      }`}
       style={cancelled ? undefined : { backgroundColor: colors?.background ?? 'var(--bwu-surface-hover)', color: colors?.foreground ?? 'var(--bwu-fg)' }}
     >
       <div className="flex items-start justify-between gap-2">

@@ -50,6 +50,8 @@ interface WeeklySlot {
   teacherId: number;
   roomId: number;
   edge?: Edge;
+  /** Demo-Fixture für showBooking/bkText/bkRemark (Doku Abschnitt 15) — unabhängig von `edge`. */
+  hasBooking?: boolean;
 }
 
 /**
@@ -68,7 +70,7 @@ const WEEKLY_TEMPLATE: WeeklySlot[] = [
   // Dienstag
   { weekday: 2, slotIndex: 0, subjectId: 3, teacherId: 14, roomId: 4 },
   { weekday: 2, slotIndex: 1, subjectId: 5, teacherId: 10, roomId: 4 },
-  { weekday: 2, slotIndex: 2, subjectId: 6, teacherId: 12, roomId: 3 },
+  { weekday: 2, slotIndex: 2, subjectId: 6, teacherId: 12, roomId: 3, hasBooking: true },
   { weekday: 2, slotIndex: 3, subjectId: 6, teacherId: 12, roomId: 3 },
   { weekday: 2, slotIndex: 5, subjectId: 7, teacherId: 15, roomId: 4 },
 
@@ -174,6 +176,9 @@ interface RawPeriod {
   /** Nur gesetzt bei Vertretung/Raumänderung — Id des ursprünglichen Elements. */
   orgTeacherId?: number;
   orgRoomId?: number;
+  /** Nur mit showBooking: true (Doku Abschnitt 15) — Buchungssystem, nicht das Klassenbuch. */
+  bkText?: string;
+  bkRemark?: string;
   /**
    * Nur intern für die `getExams`/`getExamTypes`-Simulation (Doku Abschnitt 21/22) —
    * KEIN Feld, das der echte Server über `getTimetable` liefert. Gemessen am 2026-09-17
@@ -200,6 +205,7 @@ function instantiateSlot(slot: WeeklySlot, date: WuDate): RawPeriod {
     subjectId: slot.subjectId,
     roomId: slot.roomId,
     studentGroup: '3AHIF',
+    ...(slot.hasBooking === true ? { bkText: 'Halle 2 reserviert', bkRemark: 'Geräte bitte danach wieder wegräumen' } : {}),
   };
 
   switch (slot.edge) {
@@ -354,6 +360,7 @@ export interface RenderOptions {
   showLsText?: boolean | undefined;
   showLsNumber?: boolean | undefined;
   showStudentgroup?: boolean | undefined;
+  showBooking?: boolean | undefined;
   klasseFields?: readonly ElementField[] | undefined;
   roomFields?: readonly ElementField[] | undefined;
   subjectFields?: readonly ElementField[] | undefined;
@@ -374,6 +381,8 @@ export function toCustomPeriod(raw: RawPeriod, options: RenderOptions): Period {
   if (options.showLsText === true && raw.lstext !== undefined) period.lstext = raw.lstext;
   if (options.showLsNumber === true) period.lsnumber = raw.id;
   if (options.showStudentgroup === true && raw.studentGroup !== undefined) period.sg = raw.studentGroup;
+  if (options.showBooking === true && raw.bkText !== undefined) period.bkText = raw.bkText;
+  if (options.showBooking === true && raw.bkRemark !== undefined) period.bkRemark = raw.bkRemark;
   return period;
 }
 

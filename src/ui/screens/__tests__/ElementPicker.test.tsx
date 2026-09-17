@@ -79,12 +79,17 @@ describe('Elementwechsel (M6, seit 2026-09-17 nur noch Klassen — siehe IDEEN.m
   });
 
   it('zeigt keine Lehrer-/Fach-/Raum-Tabs mehr an', async () => {
+    // Nicht pauschal "kein Tab auf der Seite" pruefen — TimetableScreen hat seit der
+    // Tag-/Wochenansicht (2026-09-17) selbst einen Tab-Umschalter, der nichts mit dem
+    // ElementPicker zu tun hat.
     const user = userEvent.setup();
     render(<App />);
     await login(user);
     await user.click(screen.getByRole('button', { name: 'Anderen Plan ansehen' }));
     await screen.findByRole('button', { name: /2BHIF/ });
 
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Lehrer' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Fach' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Raum' })).not.toBeInTheDocument();
   });
 });

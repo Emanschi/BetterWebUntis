@@ -133,6 +133,8 @@ Drei offene Punkte:
 
 **R9 – Fachfarben-Override lokal gespeichert, `localStorage` statt Cookies (2026-09-17).** Nutzerwunsch: Fachfarben individuell anpassbar, dauerhaft gemerkt — auf der Website und später in der Capacitor-App (M9). Umgesetzt über `localStorage` (`state/subjectColorStore.ts`, gleiches Muster wie `themeStore.ts`), nicht Cookies: die Farben werden nie an den Server geschickt, Cookies wären bei jeder Proxy-Anfrage unnötiger Overhead. Funktioniert unverändert in Capacitor, weil das eine echte WebView mit eigenem persistentem `localStorage` einbettet — keine Sonderbehandlung nötig, aber erst nach M9 am echten Gerät verifizierbar. Falls `localStorage` unter Android nicht robust genug ist (Speicherdruck), wäre `@capacitor/preferences` der Ersatz — bewusst nicht vorab eingebaut, da M9 noch nicht existiert (YAGNI).
 
+**R10 – `getTimetable` verlangt Start-/Enddatum innerhalb eines einzigen Schuljahres, Code `-8507` (gemessen 2026-09-17).** Bisher unbekannte Serverbedingung, gefunden über einen echten Absturz der Einstellungen-Seite: `SettingsScreen.tsx` fragte den eigenen Stundenplan über ein festes ±180-Tage-Fenster ab, das teilweise über eine Schuljahresgrenze hinausreicht — der Server lehnt das mit `-8507 startDate and endDate are not within a single school year` ab, statt die Anfrage einfach zu kappen oder zu ignorieren. Behoben durch dieselbe Schuljahres-Klammerung (`getCurrentSchoolyear()`), die Prüfungen/Abwesenheiten (R8) schon nutzen. Bewusst nur für `getTimetable` in `mock/rpcHandler.ts` nachgebildet — ob `getSubstitutions`/`getExams`/`getTimetableWithAbsences` derselben Regel unterliegen, wurde nie gemessen. Details: IDEEN.md B7.
+
 ---
 
 ## 5. Meilensteine
@@ -175,4 +177,4 @@ Drei offene Punkte:
 
 **Server:** `htlstp.webuntis.com`, Schule `htlstp`, Tenant-Id `7053500`.
 
-**Git:** nur lokale Commits, kein Remote, kein Push ohne ausdrückliche Erlaubnis.
+**Git:** Remote seit 2026-09-17 unter `github.com/Emanschi/BetterWebUntis` (`origin`), lokaler Branch `master` verfolgt `origin/main`. Push nur nach ausdrücklicher Erlaubnis je Runde, nie automatisch.
