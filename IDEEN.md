@@ -155,6 +155,40 @@ Vier zusammenhängende Nachbesserungen, alle aus demselben Feedback nach dem ers
 - Ob `bkText`/`bkRemark` bei dieser Schule real jemals befüllt ist (bisher nur simuliert)
 - Ob `getClassregEvents` für das echte Schüler-Konto tatsächlich gesperrt ist oder doch erreichbar — nie gemessen, nur angenommen (siehe Punkt 2, `scripts/smoke-test.ts`)
 
+### B8 – Echtes "Lehrstoff"-Feld gefunden (undokumentierter REST-Endpunkt) + Rücksprung zu heute (Nutzerwunsch 2026-09-17)
+
+B7 hatte offen gelassen, ob `bkText`/`bkRemark` wirklich "Lehrstoff" meint, und `getClassregEvents` als wahrscheinlicheren, aber ungemessenen Kandidaten benannt. Der Nutzer hat die Frage direkt beantwortet: mit einem Screenshot der echten WebUntis-Detailansicht ("Lehrstoff") und dem dazugehörigen Netzwerk-Request aus den Browser-DevTools — derselbe Weg wie bei B3/B3b (Prüfungen/Abwesenheiten), Nutzung wieder ausdrücklich freigegeben (siehe A1):
+
+```
+GET /WebUntis/api/rest/view/v2/calendar-entry/detail?elementId=<eigene personId>&
+  elementType=5&startDateTime=2026-09-18T11:20:00&endDateTime=2026-09-18T12:10:00&
+  homeworkOption=DUE
+
+{"calendarEntries":[{"id":9059380, …, "teachingContent":"Diskussionsthemen sammeln\n
+  andere überzeugen: Gurkerl Sommerferien\nReferatstermine und -themen\n
+  Bekanntgabe der Beurteilungskriterien", …}]}
+```
+
+Ein eigener Endpunkt für die Detailansicht EINES aufgeklappten Stundenplan-Eintrags, identifiziert über die exakte Start-/Endzeit (ISO-Format, lokale Zeit, kein Offset) statt über eine Perioden-Id — passt architektonisch nicht zu den Datumsbereich-Endpunkten aus B3/B3b, deshalb ein eigener Mock-Handler statt Wiederverwendung von `handleDateRangeRest`. `elementType=5` bestätigt nebenbei, dass `PersonType.STUDENT` und `ElementType.STUDENT` tatsächlich denselben Wert (5) verwenden.
+
+**Umgesetzt:**
+- `src/api/calendarEntryRest.ts` — neues `restApi`-Modul, nur `teachingContent` übernommen (das reale Objekt enthält deutlich mehr, siehe Datei-Kommentar); `api/format.ts` bekam einen Schreiber (`wuDateTimeToIsoLocal`) für das ISO-Zeitformat.
+- `ui/components/PeriodDetail.tsx` zeigt "Lehrstoff" (mehrzeilig, `whitespace-pre-line`, da `teachingContent` echte Zeilenumbrüche enthält) zwischen den bestehenden Status-Feldern und dem Buchungshinweis.
+- `TimetableScreen.tsx` fragt das erst ab, wenn eine Periode tatsächlich geöffnet wird (eigener `useQuery`, `retry: false` wegen ungemessenem Fehlerformat) — nicht für die ganze Woche vorab, genau wie die Original-Oberfläche das pro Klick lädt. Nur für den eigenen Plan (nicht bei "Anderen Plan ansehen") — für ein fremdes Element ist das nie gemessen worden.
+- Mock: `mock/calendarEntryRestMock.ts`, Fixture auf dem Montags-Deutsch-Slot (`mock/timetable.ts`, `hasTeachingContent`) — bewusst eine EINZELNE Stunde, keine Doppelstunde (siehe Einschränkung unten).
+
+**Bewusst nicht (noch) gemessen/übernommen:**
+- Doppelstunden: der Endpunkt identifiziert einen Eintrag über die exakte Einzelstunden-Zeitspanne, eine im Stundenplan zusammengefasste Doppelstunde hat aber nur die äußeren Grenzen als `TimetableBlock.startTime/endTime` (siehe `domain/timetable.ts`). Eine Anfrage mit den zusammengefassten Grenzen wird deshalb vermutlich keinen Treffer liefern — nicht als Sonderfall behandelt, degradiert einfach zu "kein Lehrstoff sichtbar", kein Absturz.
+- `notesAll`/`notesStaff` (Notizfelder, in der gemessenen Antwort beide `null`) und `homeworks` — nicht übernommen, da nie mit Inhalt gemessen und nicht angefragt.
+- Fehlerformat bei abgelaufener Session/fehlendem Recht — wie bei B3/B3b ungemessen.
+
+**Zweiter Teil derselben Nachricht — Rücksprung zu "heute" über die Hauptnavigation:** Klickt man auf "Stundenplan" in der Navigation, während man auf einen anderen Tag/eine andere Woche vorgeblättert hat, sprang bisher nichts zurück — React Router remountet `TimetableScreen` nur bei einem echten Pfadwechsel, ein Klick auf einen Link, der schon aktiv ist, ändert nichts. Gelöst über einen `?resetToToday=1`-Marker im Link-Ziel (`AppShell.tsx`), den `TimetableScreen.tsx` per Effekt konsumiert (Datum auf heute, aktiven Highlight beenden) und sofort wieder aus der URL entfernt — dadurch bleibt der Link beim nächsten Klick erneut wirksam. `viewMode` (Tag/Woche) bleibt bewusst unverändert, wie ausdrücklich gewünscht ("je nachdem was eingestellt ist").
+
+**Manuell verifiziert** (Mock-Server, `mmuster`, Light **und** Dark Mode):
+- Lehrstoff erscheint mehrzeilig, mit erhaltenen Zeilenumbrüchen, im Detail-Modal des Montags-Deutsch-Slots
+- Drei Wochen vorblättern, dann auf "Stundenplan" in der Navigation klicken: springt zur aktuellen Woche zurück
+- Dasselbe in der Tagesansicht: vier Tage vorblättern, "Stundenplan" klicken → zurück zum heutigen Tag, Tagesansicht bleibt aktiv (kein Zurückfallen auf Wochenansicht)
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.

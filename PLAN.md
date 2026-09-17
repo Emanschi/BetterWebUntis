@@ -135,6 +135,10 @@ Drei offene Punkte:
 
 **R10 – `getTimetable` verlangt Start-/Enddatum innerhalb eines einzigen Schuljahres, Code `-8507` (gemessen 2026-09-17).** Bisher unbekannte Serverbedingung, gefunden über einen echten Absturz der Einstellungen-Seite: `SettingsScreen.tsx` fragte den eigenen Stundenplan über ein festes ±180-Tage-Fenster ab, das teilweise über eine Schuljahresgrenze hinausreicht — der Server lehnt das mit `-8507 startDate and endDate are not within a single school year` ab, statt die Anfrage einfach zu kappen oder zu ignorieren. Behoben durch dieselbe Schuljahres-Klammerung (`getCurrentSchoolyear()`), die Prüfungen/Abwesenheiten (R8) schon nutzen. Bewusst nur für `getTimetable` in `mock/rpcHandler.ts` nachgebildet — ob `getSubstitutions`/`getExams`/`getTimetableWithAbsences` derselben Regel unterliegen, wurde nie gemessen. Details: IDEEN.md B7.
 
+**R11 – Drittes undokumentiertes REST-Endpunkt-Paar: `teachingContent` ("Lehrstoff") über calendar-entry-detail (2026-09-17).** Ergänzt R8: derselbe Nutzer-Weg (Browser-DevTools der Original-Oberfläche, ausdrücklich freigegeben) fand `GET /WebUntis/api/rest/view/v2/calendar-entry/detail?elementId=…&elementType=…&startDateTime=…&endDateTime=…&homeworkOption=DUE` — die Detailansicht EINES aufgeklappten Stundenplan-Eintrags, identifiziert über die exakte Start-/Endzeit statt über eine Perioden-Id. Löst eine in B7 offen gelassene Frage: `bkText`/`bkRemark` (R8) ist NICHT das "Lehrstoff"-Feld, das ist `teachingContent` aus diesem neuen Endpunkt. Details: IDEEN.md B8, `api/calendarEntryRest.ts`.
+
+Zwei Einschränkungen: (1) nur für den eigenen Plan abgefragt, nie für ein fremdes Element gemessen; (2) bei einer im Stundenplan zusammengefassten Doppelstunde weichen die UI-Blockgrenzen von der echten Einzelstunden-Zeitspanne ab — ein Treffer ist dafür nicht zu erwarten, degradiert aber nur zu "kein Lehrstoff sichtbar", kein Fehler.
+
 ---
 
 ## 5. Meilensteine

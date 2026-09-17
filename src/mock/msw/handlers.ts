@@ -12,6 +12,8 @@ import { SESSION_COOKIE } from '../../api/client';
 import { createMockState, handleRpc, type MockServerState } from '../rpcHandler';
 import { mockExamsRest } from '../examsRestMock';
 import { mockAbsencesRest } from '../absencesRestMock';
+import { mockCalendarEntryDetail, parseIsoLocalDateTime } from '../calendarEntryRestMock';
+import type { MockElement } from '../timetable';
 
 function readSessionCookie(cookieHeader: string | null): string | undefined {
   if (cookieHeader === null) return undefined;
@@ -48,6 +50,29 @@ function dateRangeRestHandler<T>(
 }
 
 /**
+ * Simuliert den undokumentierten calendar-entry-detail-Endpunkt (siehe
+ * api/calendarEntryRest.ts) — anderes Anfrage-/Antwortformat als `dateRangeRestHandler`
+ * (ein einzelner Eintrag über exakte Start-/Endzeit statt einer Liste über einen Zeitraum).
+ */
+function calendarEntryDetailHandler(state: MockServerState) {
+  return http.get('*/WebUntis/api/rest/view/v2/calendar-entry/detail', ({ request }) => {
+    const sessionId = readSessionCookie(request.headers.get('cookie'));
+    if (sessionId === undefined || !state.sessions.has(sessionId)) {
+      return HttpResponse.json({ error: 'not authenticated (Annahme, real nie gemessen)' }, { status: 401 });
+    }
+
+    const url = new URL(request.url);
+    const elementId = Number(url.searchParams.get('elementId') ?? NaN);
+    const elementType = Number(url.searchParams.get('elementType') ?? NaN) as MockElement['type'];
+    const start = parseIsoLocalDateTime(url.searchParams.get('startDateTime') ?? '');
+    const end = parseIsoLocalDateTime(url.searchParams.get('endDateTime') ?? '');
+
+    const detail = mockCalendarEntryDetail({ id: elementId, type: elementType }, start.date, start.time, end.time);
+    return HttpResponse.json({ calendarEntries: detail === undefined ? [] : [detail] });
+  });
+}
+
+/**
  * Baut die MSW-Handler. `state` kann von außen übergeben werden, damit ein Test seine
  * Session zwischen mehreren Requests behalten oder gezielt zurücksetzen kann.
  */
@@ -80,6 +105,7 @@ export function createMswHandlers(state: MockServerState = createMockState()) {
 
     dateRangeRestHandler('/WebUntis/api/exams', state, mockExamsRest, 'exams'),
     dateRangeRestHandler('/WebUntis/api/classreg/absences/students', state, mockAbsencesRest, 'absences'),
+    calendarEntryDetailHandler(state),
   ];
 }
 
