@@ -39,7 +39,7 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Stundenplan' })).toBeInTheDocument());
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Profil' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Prüfungen' })).toBeInTheDocument();
   });
 
   it('Abmelden fuehrt zurueck zum Login-Screen', async () => {

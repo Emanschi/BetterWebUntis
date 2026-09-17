@@ -181,22 +181,6 @@ export function buildWeekGrid(periods: readonly Period[], weekStart: WuDate): Ti
 }
 
 // ---------------------------------------------------------------------------
-// "Meine Termine" — Annäherung an Sprechstunden/Bereitschaft (IDEEN.md A4)
-//
-// Die Doku kennt dafür keine eigene Methode. lstype "oh" (office hour) und "sb"
-// (standby) sind die einzigen Felder, die inhaltlich in diese Richtung gehen.
-// ---------------------------------------------------------------------------
-
-const APPOINTMENT_LSTYPES: readonly LessonType[] = ['oh', 'sb', 'bs'];
-
-/** Filtert Perioden auf Sprechstunde/Bereitschaft/Pausenaufsicht, chronologisch sortiert. */
-export function appointmentPeriods(periods: readonly Period[]): Period[] {
-  return periods
-    .filter((p) => p.lstype !== undefined && APPOINTMENT_LSTYPES.includes(p.lstype))
-    .toSorted((a, b) => a.date - b.date || a.startTime - b.startTime);
-}
-
-// ---------------------------------------------------------------------------
 // Zeitraster (Kalender-Ansicht, M5-Nachbesserung): wie hoch/weit ist die Achse,
 // die ein TimeAxis-/DayGridColumn-Paar in der UI zeichnet. Reine Mathematik ohne
 // React, damit sie unabhängig von der Komponente testbar ist.

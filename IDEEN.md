@@ -57,14 +57,22 @@ Der Proxy hält **keinen** Zustand: er leitet den POST-Body an `jsonrpc.do` weit
    - Gibt es Cron? (Ohne Cron wird bei jedem Feed-Abruf live gegen WebUntis authentifiziert — einfacher, aber langsamer und näher am Rate-Limit.)
    - Nur für dich selbst, oder sollen Mitschüler den Feed auch nutzen können? Das ändert das Sicherheitsmodell erheblich.
 
-### B3 – Prüfungen/ICS-Export sind für Schüler-Konten real möglicherweise unbenutzbar — **wichtig für M11**
-*Gemessen am 2026-09-16 (echtes Schüler-Konto, siehe TESTING.md Abschnitt 3):* das Konto hat kein Recht auf `getExamTypes`. Ohne `getExamTypes` gibt es keine `examTypeId` — und ohne die ist `getExams` laut Doku gar nicht aufrufbar (Pflichtparameter). Der Prüfungen-Screen und der ICS-Export (M8) zeigen für dieses Konto also nur die Rechte-Fehlermeldung, nicht die Prüfungen selbst — kein Absturz, aber das Feature ist für diesen Kontotyp faktisch tot.
+### B3 – Prüfungen/Abwesenheiten für Schüler-Konten — **Nutzer-Feedback 2026-09-17, Nachmessung nötig**
+*Gemessen am 2026-09-16 (echtes Schüler-Konto, siehe TESTING.md Abschnitt 3):* das Konto hat kein Recht auf `getExamTypes` und keins auf `getTimetableWithAbsences`. Der erste Schluss daraus war: Prüfungen/ICS-Export und Abwesenheiten sind für Schüler-Konten faktisch tot.
 
-**Konsequenz für M11 (Kalenderabo):** Der Feed authentifiziert sich mit genau den Zugangsdaten des Nutzers, für den er läuft — hat der eigentliche Nutzer (typischerweise ein Schüler) dasselbe fehlende Recht, würde auch der Feed leer bleiben oder fehlschlagen, unabhängig vom Server-Code. Das ist keine Implementierungsfrage, sondern eine WebUntis-seitige Rechte-Frage.
+**Das ist laut Nutzer so nicht richtig.** Am 2026-09-17 hat der Nutzer Screenshots der echten, originalen WebUntis-Weboberfläche geschickt (`htlstp.webuntis.com`, eingeloggt mit genau diesem Schüler-Konto): dort werden sowohl Prüfungen (Tab "Prüfungen", mehrere Einträge mit Fach/Klasse/Lehrkraft/Raum/Datum) als auch Abwesenheiten (Tab "Abwesenheiten") klaglos angezeigt. Das Konto hat die nötigen Rechte offenbar — nur nicht über die Methoden, die wir bisher getestet haben.
 
-**Offene Fragen an den Auftraggeber:**
-- Ist das bei deinem Konto an der HTL grundsätzlich so, oder eine Einstellung, die sich ändern lässt (z. B. über die Schule/Admin)?
-- Falls nicht änderbar: soll der Prüfungen-Screen/ICS-Export dann ausgeblendet statt nur mit Fehlermeldung gezeigt werden, sobald `getExamTypes` fehlschlägt? (Aktuell zeigen wir bewusst den Fehler, nicht Verstecken — leichter nachvollziehbar, aber vielleicht nicht das gewünschte Verhalten.)
+**Zwei mögliche Erklärungen, beide offen:**
+1. `getExamTypes` ("examtypes read") und `getExams` ("examinations read") sind laut Doku *zwei getrennte Rechte* (PLAN.md #21/#22). Der erste Smoke-Test hat nur `getExamTypes` probiert, nie `getExams` selbst — es ist möglich, dass `getExams` mit einer bekannten `examTypeId` direkt funktioniert, auch ohne das Recht, alle Typen aufzulisten. `scripts/smoke-test.ts` probiert das jetzt aktiv durch (IDs 1–10).
+2. Die originale Weboberfläche nutzt seit einigen Jahren teils die neuere WebUntis-REST-API (`/WebUntis/api/...`), nicht mehr nur das 2018er JSON-RPC. Falls `getExams`/`getTimetableWithAbsences` auch direkt fehlschlagen, wäre das der wahrscheinlichere Grund — und würde bedeuten, dass diese Features mit der dokumentierten API grundsätzlich nicht für dieses Konto gehen (siehe A1, gleiche Kategorie: undokumentierte Schnittstelle, **nichts wird ohne Freigabe umgesetzt**).
+
+**Nächster Schritt:** Der Nutzer führt `npm run smoke` mit dem verbesserten Skript erneut aus (druckt jetzt rohe Fehlercodes statt nur ja/nein, plus den direkten `getExams`-Probe-Durchlauf). Erst mit den echten Ergebnissen lässt sich entscheiden, ob (a) ein reiner Code-Fix reicht (z. B. `getExams` mit geratener/bekannter ID versuchen, wenn `getExamTypes` fehlschlägt) oder (b) eine Grundsatzentscheidung über undokumentierte Endpunkte ansteht.
+
+**Konsequenz für M11 (Kalenderabo):** unverändert gültig — der Feed authentifiziert sich mit den Zugangsdaten des Nutzers, für den er läuft; welche Rechte/Methoden dafür nötig sind, hängt vom Ausgang der Nachmessung ab.
+
+### B4 – Scope-Entscheidung 2026-09-17: vorerst nur Schüler-Konten, "Termine" und "Profil" entfernt
+Nutzer-Feedback: die App soll vorerst ausschließlich Schüler-Konten unterstützen. Die Tabs "Meine Termine" (IDEEN.md A4, Pflichtpunkt 4 des ursprünglichen Auftrags) und "Profil" werden nicht gebraucht — beide Screens, ihre Routen und die zugehörige Domain-Funktion (`appointmentPeriods`) wurden entfernt, nicht nur ausgeblendet (Repo soll keinen toten Code tragen). Bei Bedarf über `git log` wiederherstellbar — die Funktion war vollständig getestet.
+**Achtung:** A4 war Pflichtpunkt 4 des ursprünglichen Auftrags — diese Entfernung ist eine bewusste, aber vorläufige Scope-Reduktion ("vorerst"), keine endgültige Streichung der Anforderung.
 
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
