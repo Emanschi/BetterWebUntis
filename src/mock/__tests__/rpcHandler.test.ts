@@ -162,6 +162,26 @@ describe('getTimetable — Randfaelle', () => {
     const officeHour = periods.find((p) => p.lstype === 'oh');
     expect(officeHour).toBeDefined();
   });
+
+  it('lehnt einen Zeitraum ab, der mehr als ein Schuljahr umspannt (Code -8507, gemessen 2026-09-17)', () => {
+    const state = createMockState();
+    const loginOutcome = login(state, 'mmuster', 'test1234');
+    const sessionId = loginOutcome.session!.sessionId;
+
+    const outcome = handleRpc(state, sessionId, {
+      id: '2',
+      method: 'getTimetable',
+      params: { options: { element: { id: 501, type: 5 }, startDate: 20260101, endDate: 20270601 } },
+    });
+
+    expect('error' in outcome.envelope).toBe(true);
+    if ('error' in outcome.envelope) expect(outcome.envelope.error.code).toBe(WebUntisErrorCode.NOT_WITHIN_SINGLE_SCHOOLYEAR);
+  });
+
+  it('akzeptiert einen Zeitraum innerhalb eines Schuljahres weiterhin', () => {
+    const periods = timetableFor('mmuster', 'test1234', 501, 5);
+    expect(periods.length).toBeGreaterThan(0);
+  });
 });
 
 describe('getSubstitutions', () => {

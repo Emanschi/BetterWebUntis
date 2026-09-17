@@ -67,4 +67,25 @@ describe('Prüfungen (Nachbesserung: REST-Workaround statt getExams, IDEEN.md B3
 
     expect(await screen.findByText('Keine Prüfungen in diesem Schuljahr.')).toBeInTheDocument();
   });
+
+  it('Klick auf eine Pruefung springt im Stundenplan zur passenden Woche und hebt sie hervor (Nutzerwunsch 2026-09-17)', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await loginAs(user, 'mmuster', 'test1234');
+
+    await user.click(screen.getByRole('link', { name: 'Prüfungen' }));
+    const examCards = await screen.findAllByRole('button', { name: /Im Stundenplan anzeigen/ });
+    // examCards[0] (10.09.2026) liegt in derselben Woche wie "heute" (gepinnt auf
+    // 09.09.2026) — waere kein aussagekraeftiger Sprung-Test. examCards[1] ist der
+    // 2. Fixtermin (19.11.2026), eine andere Woche.
+    await user.click(examCards[1]!);
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Stundenplan' })).toBeInTheDocument());
+    // Erst warten, bis die Perioden geladen sind — sonst gibt es noch keine Karten, gegen
+    // die der Highlight-Match ueberhaupt pruefen koennte.
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+    expect(await screen.findByText(/16\.11\. – 22\.11\.2026/)).toBeInTheDocument();
+
+    await waitFor(() => expect(document.querySelector('.bwu-neon-highlight')).not.toBeNull());
+  });
 });

@@ -19,9 +19,13 @@ export const JsonRpcErrorCode = {
 /**
  * WebUntis-spezifische Fehlercodes.
  *
- * VERIFIZIERT — am 2026-09-10 direkt gegen htlstp.webuntis.com gemessen (siehe TESTING.md):
- *   BAD_CREDENTIALS   -8504  "bad credentials"
- *   NOT_AUTHENTICATED -8520  "not authenticated"
+ * VERIFIZIERT — direkt gegen htlstp.webuntis.com gemessen (siehe TESTING.md):
+ *   BAD_CREDENTIALS             -8504  "bad credentials" (2026-09-10)
+ *   NOT_AUTHENTICATED           -8520  "not authenticated" (2026-09-10)
+ *   NO_RIGHT_FOR_METHOD         -8509  "no right for ..." (M10, mehrfach gemessen)
+ *   NOT_WITHIN_SINGLE_SCHOOLYEAR -8507 "startDate and endDate are not within a single
+ *                                       school year" (2026-09-17, getTimetable mit >1
+ *                                       Schuljahr Zeitraum — siehe SettingsScreen.tsx)
  *
  * NICHT VERIFIZIERT — in der Praxis verbreitet, aber weder dokumentiert noch von uns
  * beobachtet. Nur für bessere Fehlermeldungen verwendet; die Logik funktioniert auch,
@@ -35,8 +39,10 @@ export const WebUntisErrorCode = {
   NOT_AUTHENTICATED: -8520,
   /** nicht verifiziert */
   INVALID_SCHOOLNAME: -8500,
-  /** nicht verifiziert */
+  /** verifiziert */
   NO_RIGHT_FOR_METHOD: -8509,
+  /** verifiziert */
+  NOT_WITHIN_SINGLE_SCHOOLYEAR: -8507,
   /** nicht verifiziert */
   INVALID_ELEMENT_OR_RANGE: -7004,
 } as const;
@@ -131,6 +137,8 @@ export function describeError(error: unknown): string {
         return 'Der Schulname ist unbekannt.';
       case WebUntisErrorCode.NO_RIGHT_FOR_METHOD:
         return 'Dein Konto hat nicht die nötigen Rechte für diese Abfrage.';
+      case WebUntisErrorCode.NOT_WITHIN_SINGLE_SCHOOLYEAR:
+        return 'Der angefragte Zeitraum überspannt mehr als ein Schuljahr.';
       case WebUntisErrorCode.INVALID_ELEMENT_OR_RANGE:
         return 'Das angefragte Element oder der Zeitraum ist ungültig.';
       case JsonRpcErrorCode.METHOD_NOT_FOUND:

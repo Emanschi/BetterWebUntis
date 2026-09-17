@@ -436,3 +436,49 @@ durchgeklickt):
 - [ ] Ob `localStorage` in der späteren Capacitor-App (M9, noch nicht gebaut) tatsächlich
       robust genug ist, oder ob `@capacitor/preferences` nötig wird — lässt sich erst am
       echten Gerät zeigen, siehe IDEEN.md B6
+
+### Settings-Absturz (-8507), Buchungshinweis, Prüfungs-Sprung, Tages-/Wochenansicht (2026-09-17)
+
+Direktes Feedback nach dem ersten Live-Test des Kalender-Redesigns. Details und Hintergrund:
+IDEEN.md B7, PLAN.md R10.
+
+**Neuer, bisher ungemessener Fehlercode: `-8507`.** Die Einstellungen-Seite stürzte gegen den
+echten Server ab. Ursache: `getTimetable` verlangt `startDate`/`endDate` **innerhalb eines
+einzigen Schuljahres** — `SettingsScreen.tsx` fragte bisher ein festes ±180-Tage-Fenster ab,
+das teilweise über die Schuljahresgrenze hinausreicht:
+
+```
+{"error":{"message":"startDate and endDate are not within a single school year","code":-8507}}
+```
+
+Behoben durch dieselbe Schuljahres-Klammerung (`getCurrentSchoolyear()`), die Prüfungen/
+Abwesenheiten schon verwenden. `mock/rpcHandler.ts` validiert dieselbe Regel jetzt auch, aber
+bewusst nur für `getTimetable` — ob `getSubstitutions`/`getExams`/`getTimetableWithAbsences`
+derselben Einschränkung unterliegen, wurde nie gemessen.
+
+**"Lehrstoff"-Wunsch: kein erfundenes Feld, sondern ehrlich benannt.** Das einzige dokumentierte,
+bisher ungenutzte Feld in diese Richtung ist `bkText`/`bkRemark` (Doku Abschnitt 15,
+`showBooking: true`) — jetzt angefragt und als "Buchungshinweis"/"Buchungsvermerk" in der
+Detailansicht gezeigt, ausdrücklich **nicht** als "Lehrstoff" bezeichnet, da diese Zuordnung
+nicht verifiziert ist. Der naheliegendere Kandidat, `getClassregEvents` (Klassenbuch), wurde
+nie gegen das echte Schüler-Konto gemessen — die "gesperrt"-Annahme in `mock/accounts.ts` war
+bisher nur übernommen, nicht selbst gemessen. `scripts/smoke-test.ts` fragt das jetzt in der
+Rechte-Probe mit ab.
+
+**Manuell verifiziert** (Mock-Server, `mmuster`, Light **und** Dark Mode):
+- Einstellungen öffnet ohne Fehler, zeigt weiterhin nur die 7 tatsächlich eingeplanten Fächer
+- BSP-Doppelstunde (Dienstag) zeigt "Halle 2 reserviert"/"Geräte bitte danach wieder
+  wegräumen" im Detail-Modal
+- Klick auf die 2. Prüfung (19.11.2026) bzw. 3. Prüfung (28.01.2027) in "Prüfungen" springt im
+  Stundenplan zur jeweils korrekten Woche und zeigt einen pulsierenden roten Neon-Rahmen genau
+  auf dem betroffenen Block, der nach ca. 3 Sekunden von selbst verschwindet
+- Woche/Tag-Tab wechselt korrekt zwischen Ansichten; im Tagesmodus bewegen Vor/Zurück einzelne
+  Tage (auch über Wochengrenzen hinweg); Warnungen (z. B. Raumänderung Freitag) bleiben auch im
+  Tagesmodus sichtbar
+
+**Noch offen:**
+- [ ] Ob `bkText`/`bkRemark` bei dieser Schule real jemals befüllt ist (bisher nur simuliert)
+- [ ] Ob `getClassregEvents` für das echte Schüler-Konto erreichbar ist oder gesperrt — nie
+      gemessen, nur angenommen; `scripts/smoke-test.ts` probiert es jetzt in der Rechte-Probe
+- [ ] Ob `-8507` auch für `getSubstitutions`/`getExams`/`getTimetableWithAbsences` gilt (nur für
+      `getTimetable` direkt gemessen)

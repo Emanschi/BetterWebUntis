@@ -67,6 +67,9 @@ export interface TimetableBlock {
   substText?: string;
   lstext?: string;
   studentGroup?: string;
+  /** Nur mit showBooking: true (Doku Abschnitt 15) — Buchungssystem, nicht das Klassenbuch. */
+  bookingText?: string;
+  bookingRemark?: string;
 }
 
 export interface TimetableDay {
@@ -111,6 +114,8 @@ function toBlock(period: Period): TimetableBlock {
   if (period.substText !== undefined) block.substText = period.substText;
   if (period.lstext !== undefined) block.lstext = period.lstext;
   if (period.sg !== undefined) block.studentGroup = period.sg;
+  if (period.bkText !== undefined) block.bookingText = period.bkText;
+  if (period.bkRemark !== undefined) block.bookingRemark = period.bkRemark;
   return block;
 }
 

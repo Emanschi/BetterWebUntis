@@ -127,6 +127,34 @@ Drei zusammenhängende Änderungen an der Kalender-Ansicht:
 
 **Manuell verifiziert** (Mock-Server, Light und Dark Mode): gefüllte Karten in beiden Themes lesbar, Entfall/Vertretung/Prüfungs-Badge weiterhin klar erkennbar, Klick öffnet die Detailansicht mit allen Feldern, "Farbe anpassen"-Link führt zu Einstellungen, Farbwahl wirkt sofort auf dem Stundenplan (beide Vorkommen der Doppelstunde), Zurücksetzen stellt die generierte Farbe wieder her.
 
+### B7 – Settings-Absturz behoben, Buchungshinweis statt erfundenem "Lehrstoff", Prüfungs-Sprung, Tages-/Wochenansicht (Nutzerwunsch 2026-09-17)
+
+Vier zusammenhängende Nachbesserungen, alle aus demselben Feedback nach dem ersten Live-Test des Kalender-Redesigns (B6):
+
+**1. `-8507`-Absturz beim Öffnen der Einstellungen — behoben.** `SettingsScreen.tsx` fragte den eigenen Stundenplan bisher über ein naives ±180-Tage-Fenster ab. Gegen den echten Server ergab das einen bisher unbekannten Fehlercode: `getTimetable` verlangt `startDate`/`endDate` **innerhalb eines einzigen Schuljahres** — ein Fenster, das über eine Schuljahresgrenze hinausreicht, wird abgelehnt (`-8507 startDate and endDate are not within a single school year`, neu in `api/errors.ts`, `describeError`-Text ergänzt). Behoben durch dieselbe Schuljahres-Klammerung, die Prüfungen/Abwesenheiten schon nutzen: `getCurrentSchoolyear()` statt eines festen Tage-Fensters. Mock (`mock/rpcHandler.ts`) validiert dieselbe Regel jetzt auch, bewusst nur für `getTimetable` — für `getSubstitutions`/`getExams`/`getTimetableWithAbsences` wurde das nie gemessen, dort also nicht angenommen.
+
+**2. Kein erfundenes "Lehrstoff"-Feld — stattdessen ehrlich benannt, was die API wirklich hergibt.** Nutzerwunsch war, dass von Lehrkräften eingetragene Notizen/Lehrstoff in der Detailansicht sichtbar werden. Die 2018er-Doku hat dafür kein Feld namens "Lehrstoff". Das einzige dokumentierte, bisher ungenutzte Perioden-Feld in diese Richtung ist `bkText`/`bkRemark` (Abschnitt 15, `showBooking: true` in den `options`) — jetzt angefragt und in `PeriodDetail.tsx` als **"Buchungshinweis"/"Buchungsvermerk"** angezeigt, nicht als "Lehrstoff", weil diese Zuordnung nicht verifiziert ist (das Feld heißt im Original-Kontext eher nach Raum-/Ressourcenbuchung). Der naheliegendere Kandidat für echten Lehrstoff ist `getClassregEvents` (Klassenbuch, Abschnitt 20) — bisher nie gegen das echte Schüler-Konto gemessen (die "gesperrt"-Annahme in `mock/accounts.ts` war bloß übernommen, nicht selbst verifiziert). `scripts/smoke-test.ts` fragt das jetzt in der Rechte-Probe mit ab; Ergebnis steht noch aus.
+
+**3. Klick auf eine Prüfung springt im Stundenplan zur passenden Woche/zum passenden Tag, mit Neon-Hervorhebung.** `ExamsScreen.tsx` verlinkt jetzt jede Prüfungskarte ("Im Stundenplan anzeigen →") auf `/timetable?highlightDate=…&highlightStart=…&highlightEnd=…`. `TimetableScreen.tsx` liest diese Parameter beim Mount, springt direkt zur richtigen Woche (statt zur aktuellen), findet den passenden Block per Zeit-Intervall-Überlappung und legt für `3,2` Sekunden einen pulsierenden roten Neon-Rahmen an (`index.css`, `@keyframes bwu-neon-pulse`, bewusst themeunabhängig fest rot, nicht an Fachfarbe gekoppelt — der Rahmen muss unabhängig von der darunterliegenden Farbe auffallen).
+
+**4. Tages-/Wochenansicht umschaltbar.** Bisher gab es nur eine feste Wochenansicht. `TimetableScreen.tsx` hat jetzt einen Woche/Tag-Tab-Umschalter; im Tagesmodus bewegen Vor/Zurück einen einzelnen Tag statt einer Woche (auch über Wochengrenzen hinweg, da `weekStart` jetzt aus `selectedDate` abgeleitet wird, keine eigene Zustandsvariable mehr ist).
+
+**Umgesetzt:**
+- `src/ui/screens/SettingsScreen.tsx`, `src/api/errors.ts`, `src/mock/rpcHandler.ts` (Punkt 1)
+- `src/domain/timetable.ts` (`bookingText`/`bookingRemark`), `src/ui/components/PeriodDetail.tsx`, `src/mock/timetable.ts` (Punkt 2)
+- `src/ui/screens/ExamsScreen.tsx`, `src/ui/screens/TimetableScreen.tsx`, `src/ui/components/TimetableBlockCard.tsx`, `src/index.css` (Punkt 3)
+- `src/ui/screens/TimetableScreen.tsx` (Punkt 4)
+
+**Manuell verifiziert** (Mock-Server, `mmuster`, Light **und** Dark Mode):
+- Einstellungen öffnet ohne Fehler, zeigt weiterhin nur die 7 tatsächlich eingeplanten Fächer
+- BSP-Doppelstunde (Dienstag) zeigt "Halle 2 reserviert"/"Geräte bitte danach wieder wegräumen" im Modal
+- Klick auf die 2. bzw. 3. Prüfung in "Prüfungen" springt zur korrekten Woche (16.11.–22.11.2026 bzw. 25.01.–31.01.2027) und zeigt den roten Neon-Rahmen auf dem richtigen Block
+- Woche/Tag-Umschalter wechselt korrekt zwischen Ansichten, Tagesnavigation bewegt einzelne Tage inkl. Wochenwechsel, zeigt weiterhin Warnungen (z. B. Raumänderung) im Tagesmodus
+
+**Bewusst nicht (noch) gemessen:**
+- Ob `bkText`/`bkRemark` bei dieser Schule real jemals befüllt ist (bisher nur simuliert)
+- Ob `getClassregEvents` für das echte Schüler-Konto tatsächlich gesperrt ist oder doch erreichbar — nie gemessen, nur angenommen (siehe Punkt 2, `scripts/smoke-test.ts`)
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.

@@ -89,6 +89,17 @@ describe('describeError', () => {
     expect(message).toContain('Rechte');
   });
 
+  it('weist auf einen zu weiten Zeitraum hin — gemessen 2026-09-17, Code -8507', () => {
+    const message = describeError(
+      new WebUntisRpcError(
+        { code: WebUntisErrorCode.NOT_WITHIN_SINGLE_SCHOOLYEAR, message: 'startDate and endDate are not within a single school year' },
+        'getTimetable',
+        '1',
+      ),
+    );
+    expect(message).toContain('Schuljahr');
+  });
+
   it('verschluckt unbekannte Codes nicht, sondern reicht die Servermeldung durch', () => {
     const message = describeError(
       new WebUntisRpcError({ code: -9999, message: 'something new' }, 'getRooms', '1'),

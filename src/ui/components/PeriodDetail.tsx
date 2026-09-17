@@ -42,6 +42,8 @@ export function PeriodDetail({ block }: { block: TimetableBlock }) {
       <Row label="Vertretungstext" value={block.substText} />
       <Row label="Zusatzinfo" value={block.info} />
       <Row label="Hinweis" value={block.lstext} />
+      <Row label="Buchungshinweis" value={block.bookingText} />
+      <Row label="Buchungsvermerk" value={block.bookingRemark} />
 
       {block.subject?.id !== undefined && (
         <Link to="/settings" className="text-sm text-accent hover:underline">

@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSessionStore } from '../../state/sessionStore';
 import { api } from '../../api/index';
-import { addWuDays, toWuDate } from '../../api/format';
 import type { Subject } from '../../api/types';
 import { subjectColor } from '../../domain/colors';
 import { useSubjectColorStore } from '../../state/subjectColorStore';
@@ -34,12 +33,6 @@ const PALETTE = [
   '#78716c',
 ];
 
-/** Weites Fenster, damit auch Fächer erfasst werden, die diese Woche gerade nicht dran sind. */
-function subjectSearchRange() {
-  const today = toWuDate(new Date());
-  return { startDate: addWuDays(today, -180), endDate: addWuDays(today, 180) };
-}
-
 /**
  * Fachfarben anpassen (Nutzerwunsch 2026-09-17). Zeigt nur Fächer, die im eigenen
  * Stundenplan tatsächlich vorkommen (nicht den ganzen Schulkatalog aus `getSubjects` —
@@ -66,8 +59,18 @@ export function SettingsScreen() {
     enabled: client !== null && element !== undefined,
     queryFn: async () => {
       if (client === null || element === undefined) throw new Error('Keine aktive Sitzung.');
-      const { startDate, endDate } = subjectSearchRange();
-      const periods = await api.getTimetableCustom(client, { element, startDate, endDate, subjectFields: ['id'] });
+      // Bewusst NICHT +-180 Tage (war so, siehe TESTING.md): der echte Server lehnt
+      // getTimetable ab, wenn startDate/endDate ausserhalb desselben Schuljahres liegen
+      // (Code -8507, "not within a single school year") -- gemessen 2026-09-17. Ein
+      // Schuljahr auf einmal ist also nicht nur UX-Praeferenz (wie bei Pruefungen/
+      // Abwesenheiten, IDEEN.md B3), sondern hier zwingend.
+      const schoolyear = await api.getCurrentSchoolyear(client);
+      const periods = await api.getTimetableCustom(client, {
+        element,
+        startDate: schoolyear.startDate,
+        endDate: schoolyear.endDate,
+        subjectFields: ['id'],
+      });
       return new Set(periods.map((p) => p.su?.[0]?.id).filter((id): id is number => id !== undefined));
     },
   });
@@ -103,7 +106,7 @@ export function SettingsScreen() {
       {(ownSubjectIdsQuery.isError || subjectsQuery.isError) && <ErrorState error={error} />}
 
       {mySubjects !== undefined && mySubjects.length === 0 && (
-        <Card className="text-sm text-fg-muted">Keine Fächer im Stundenplan der letzten/nächsten 180 Tage gefunden.</Card>
+        <Card className="text-sm text-fg-muted">Keine Fächer im Stundenplan dieses Schuljahres gefunden.</Card>
       )}
 
       {mySubjects !== undefined && mySubjects.length > 0 && (
