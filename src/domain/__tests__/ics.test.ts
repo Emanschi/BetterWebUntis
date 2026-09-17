@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { buildExamsIcs, examUid, type ExamIcsEntry } from '../ics';
-import type { Period } from '../../api/types';
+import { buildExamsIcs, examUid } from '../ics';
+import type { RestExam } from '../../api/examsRest';
 
-function period(overrides: Partial<Period> & Pick<Period, 'id' | 'date' | 'startTime' | 'endTime'>): Period {
-  return { lstype: 'ex', ...overrides };
+function exam(overrides: Partial<RestExam> & Pick<RestExam, 'id' | 'examDate' | 'startTime' | 'endTime'>): RestExam {
+  return {
+    examType: 'SA_TE',
+    name: 'AM',
+    subject: 'AM',
+    studentClass: [],
+    teachers: [],
+    rooms: [],
+    text: '',
+    grade: '',
+    ...overrides,
+  };
 }
 
 const FIXED_NOW = new Date(Date.UTC(2026, 8, 10, 12, 0, 0));
@@ -25,29 +35,34 @@ describe('buildExamsIcs — Rahmen', () => {
 });
 
 describe('buildExamsIcs — ein Ereignis', () => {
-  const entries: ExamIcsEntry[] = [
-    {
-      period: period({ id: 1, date: 20260910, startTime: 1425, endTime: 1510, lstext: 'Schularbeit' }),
-      subjectName: 'Angewandte Mathematik',
-      klasseNames: ['3AHIF'],
-    },
+  const exams: RestExam[] = [
+    exam({
+      id: 0, // echte Beispielantwort hatte id:0 fuer jede Pruefung — bewusst NICHT fuer die UID verwendet
+      subject: 'NW2',
+      examDate: 20260918,
+      startTime: 1220,
+      endTime: 1310,
+      studentClass: ['3BHIF'],
+      teachers: ['MAYR'],
+      rooms: ['N306'],
+      text: 'Nomenklatur',
+    }),
   ];
-  const ics = buildExamsIcs(entries, FIXED_NOW);
+  const ics = buildExamsIcs(exams, FIXED_NOW);
 
   it('enthaelt genau einen VEVENT-Block', () => {
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1);
     expect(ics.match(/END:VEVENT/g)).toHaveLength(1);
   });
 
-  it('UID ist stabil und enthaelt die Perioden-Id', () => {
-    expect(ics).toContain(`UID:${examUid(entries[0]!.period)}`);
-    expect(examUid(entries[0]!.period)).toBe('exam-period-1@betterwebuntis.local');
+  it('UID ist stabil, aus Datum/Uhrzeit/Fach gebaut, nicht aus der unzuverlaessigen exam.id', () => {
+    expect(ics).toContain(`UID:${examUid(exams[0]!)}`);
+    expect(examUid(exams[0]!)).toBe('exam-20260918-1220-nw2@betterwebuntis.local');
   });
 
   it('DTSTART/DTEND als floating time ohne Z-Suffix und ohne TZID (Doku liefert keine Zeitzone)', () => {
-    // 1425 = 14:25, 1510 = 15:10 (siehe format.ts wuTimeToMinutes)
-    expect(ics).toContain('DTSTART:20260910T142500');
-    expect(ics).toContain('DTEND:20260910T151000');
+    expect(ics).toContain('DTSTART:20260918T122000');
+    expect(ics).toContain('DTEND:20260918T131000');
     expect(ics).not.toMatch(/DTSTART:\d{8}T\d{6}Z/);
     expect(ics).not.toContain('TZID');
   });
@@ -57,64 +72,75 @@ describe('buildExamsIcs — ein Ereignis', () => {
   });
 
   it('SUMMARY enthaelt den Fachnamen', () => {
-    expect(ics).toContain('SUMMARY:Angewandte Mathematik — Prüfung');
+    expect(ics).toContain('SUMMARY:NW2 — Prüfung');
   });
 
-  it('DESCRIPTION enthaelt Klasse und den Lehrer-Zusatztext', () => {
-    expect(ics).toContain('Klasse: 3AHIF');
-    expect(ics).toContain('Schularbeit');
+  it('LOCATION enthaelt den Raum', () => {
+    expect(ics).toContain('LOCATION:N306');
+  });
+
+  it('DESCRIPTION enthaelt Klasse, Lehrkraft und den Pruefungstext', () => {
+    expect(ics).toContain('Klasse: 3BHIF');
+    expect(ics).toContain('Lehrkraft: MAYR');
+    expect(ics).toContain('Nomenklatur');
+  });
+});
+
+describe('buildExamsIcs — Note', () => {
+  it('zeigt die Note in der Beschreibung, wenn vorhanden', () => {
+    const ics = buildExamsIcs([exam({ id: 1, examDate: 20260910, startTime: 1000, endTime: 1050, grade: '2 Gut' })], FIXED_NOW);
+    expect(ics).toContain('Note: 2 Gut');
+  });
+
+  it('keine Note-Zeile, wenn (noch) unbenotet', () => {
+    const ics = buildExamsIcs([exam({ id: 1, examDate: 20260910, startTime: 1000, endTime: 1050, grade: '' })], FIXED_NOW);
+    expect(ics).not.toContain('Note:');
   });
 });
 
 describe('buildExamsIcs — mehrere Ereignisse', () => {
   it('erzeugt einen Block je Pruefung, in derselben Reihenfolge wie uebergeben', () => {
-    const entries: ExamIcsEntry[] = [
-      { period: period({ id: 1, date: 20260910, startTime: 1000, endTime: 1050 }), subjectName: 'Deutsch' },
-      { period: period({ id: 2, date: 20260917, startTime: 1000, endTime: 1050 }), subjectName: 'Englisch' },
+    const exams: RestExam[] = [
+      exam({ id: 1, subject: 'D', examDate: 20260910, startTime: 1000, endTime: 1050 }),
+      exam({ id: 2, subject: 'E', examDate: 20260917, startTime: 1000, endTime: 1050 }),
     ];
-    const ics = buildExamsIcs(entries, FIXED_NOW);
+    const ics = buildExamsIcs(exams, FIXED_NOW);
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2);
-    expect(ics.indexOf('Deutsch')).toBeLessThan(ics.indexOf('Englisch'));
+    expect(ics.indexOf('SUMMARY:D')).toBeLessThan(ics.indexOf('SUMMARY:E'));
+  });
+
+  it('baut fuer zwei Pruefungen an unterschiedlichen Terminen unterschiedliche UIDs', () => {
+    const a = exam({ id: 0, subject: 'AM', examDate: 20260910, startTime: 1000, endTime: 1050 });
+    const b = exam({ id: 0, subject: 'AM', examDate: 20261119, startTime: 1000, endTime: 1050 });
+    expect(examUid(a)).not.toBe(examUid(b));
   });
 });
 
 describe('buildExamsIcs — Escaping (RFC 5545 §3.3.11)', () => {
   it('escaped Kommas, Semikolons und Backslashes im Fachnamen', () => {
-    const entries: ExamIcsEntry[] = [
-      {
-        period: period({ id: 1, date: 20260910, startTime: 800, endTime: 850 }),
-        subjectName: 'Fach; mit, Komma\\Backslash',
-      },
-    ];
-    const ics = buildExamsIcs(entries, FIXED_NOW);
+    const exams: RestExam[] = [exam({ id: 1, subject: 'Fach; mit, Komma\\Backslash', examDate: 20260910, startTime: 800, endTime: 850 })];
+    const ics = buildExamsIcs(exams, FIXED_NOW);
     expect(ics).toContain('SUMMARY:Fach\\; mit\\, Komma\\\\Backslash — Prüfung');
   });
 
-  it('ohne Klasse und ohne Zusatztext: keine DESCRIPTION-Zeile', () => {
-    const entries: ExamIcsEntry[] = [{ period: period({ id: 1, date: 20260910, startTime: 800, endTime: 850 }), subjectName: 'M' }];
-    const ics = buildExamsIcs(entries, FIXED_NOW);
+  it('ohne Klasse/Lehrkraft/Text/Note: keine DESCRIPTION-Zeile', () => {
+    const exams: RestExam[] = [exam({ id: 1, subject: 'M', examDate: 20260910, startTime: 800, endTime: 850 })];
+    const ics = buildExamsIcs(exams, FIXED_NOW);
     expect(ics).not.toContain('DESCRIPTION:');
   });
 
-  it('mehrere Zusatztext-Felder werden dedupliziert (z. B. lstext == info)', () => {
-    const entries: ExamIcsEntry[] = [
-      {
-        period: period({ id: 1, date: 20260910, startTime: 800, endTime: 850, lstext: 'Schularbeit', info: 'Schularbeit' }),
-        subjectName: 'M',
-      },
-    ];
-    const ics = buildExamsIcs(entries, FIXED_NOW);
-    expect(ics.match(/Schularbeit/g)).toHaveLength(1);
+  it('ohne Raum: keine LOCATION-Zeile', () => {
+    const exams: RestExam[] = [exam({ id: 1, subject: 'M', examDate: 20260910, startTime: 800, endTime: 850, rooms: [] })];
+    const ics = buildExamsIcs(exams, FIXED_NOW);
+    expect(ics).not.toContain('LOCATION:');
   });
 });
 
 describe('buildExamsIcs — Zeilenfaltung (RFC 5545 §3.1)', () => {
   it('faltet Zeilen ueber 75 Oktette; jede physische Zeile bleibt darunter', () => {
     const longSubject = 'X'.repeat(120);
-    const entries: ExamIcsEntry[] = [
-      { period: period({ id: 1, date: 20260910, startTime: 800, endTime: 850 }), subjectName: longSubject },
-    ];
-    const ics = buildExamsIcs(entries, FIXED_NOW);
+    const exams: RestExam[] = [exam({ id: 1, subject: longSubject, examDate: 20260910, startTime: 800, endTime: 850 })];
+    const ics = buildExamsIcs(exams, FIXED_NOW);
 
     for (const line of ics.split('\r\n')) {
       expect(line.length).toBeLessThanOrEqual(75);

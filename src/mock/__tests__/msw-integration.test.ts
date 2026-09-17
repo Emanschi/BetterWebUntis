@@ -59,7 +59,7 @@ describe('WebUntisClient gegen den Mock-Server (echter fetch, echtes Cookie-Hand
 
     expect(periods.some((p) => p.code === 'cancelled')).toBe(true); // Entfall
     expect(periods.filter((p) => p.code === 'irregular').length).toBeGreaterThanOrEqual(2); // Vertretung + Raumaenderung
-    expect(periods.some((p) => p.lstype === 'ex')).toBe(true); // Pruefung
+    expect(periods.some((p) => p.info === '1. Schularbeit')).toBe(true); // Pruefung: kein lstype/code, siehe IDEEN.md B3
     expect(periods.some((p) => p.su?.[0]?.name !== undefined)).toBe(true); // *Fields wurden honoriert
 
     await api.logout(client);

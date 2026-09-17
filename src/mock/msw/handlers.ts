@@ -10,6 +10,7 @@
 import { http, HttpResponse } from 'msw';
 import { SESSION_COOKIE } from '../../api/client';
 import { createMockState, handleRpc, type MockServerState } from '../rpcHandler';
+import { mockExamsRest } from '../examsRestMock';
 
 function readSessionCookie(cookieHeader: string | null): string | undefined {
   if (cookieHeader === null) return undefined;
@@ -49,6 +50,24 @@ export function createMswHandlers(state: MockServerState = createMockState()) {
       }
 
       return HttpResponse.json(outcome.envelope, { headers });
+    }),
+
+    // Undokumentierter REST-Endpunkt (siehe api/examsRest.ts) — kein Teil der 2018er-Doku,
+    // dasselbe 401-bei-fehlender-Session-Verhalten wie in mock/server.ts (Annahme, nie
+    // real gemessen).
+    http.get('*/WebUntis/api/exams', ({ request }) => {
+      const sessionId = readSessionCookie(request.headers.get('cookie'));
+      if (sessionId === undefined || !state.sessions.has(sessionId)) {
+        return HttpResponse.json(
+          { error: 'not authenticated (Annahme, real nie gemessen — siehe examsRest.ts)' },
+          { status: 401 },
+        );
+      }
+
+      const url = new URL(request.url);
+      const startDate = Number(url.searchParams.get('startDate') ?? 0);
+      const endDate = Number(url.searchParams.get('endDate') ?? 99999999);
+      return HttpResponse.json({ data: { exams: mockExamsRest(startDate, endDate) } });
     }),
   ];
 }

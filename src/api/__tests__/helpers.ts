@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { WebUntisClient } from '../client';
-import type { RpcHttpRequest, RpcHttpResponse, RpcTransport } from '../transport';
+import type { RpcHttpGetRequest, RpcHttpRequest, RpcHttpResponse, RpcTransport } from '../transport';
 
 /** Lädt ein Fixture als Rohtext, so wie es der Server liefern würde. */
 export function fixtureText(name: string): string {
@@ -28,6 +28,7 @@ export class StubTransport implements RpcTransport {
   canSetCookieHeader: boolean;
 
   readonly requests: RpcHttpRequest[] = [];
+  readonly getRequests: RpcHttpGetRequest[] = [];
   readonly #responses: StubResponse[] = [];
   /** Wird geworfen statt zu antworten, wenn gesetzt. */
   failWith: Error | null = null;
@@ -49,10 +50,20 @@ export class StubTransport implements RpcTransport {
 
   async send(request: RpcHttpRequest): Promise<RpcHttpResponse> {
     this.requests.push(request);
+    return this.#nextResponse();
+  }
+
+  async sendGet(request: RpcHttpGetRequest): Promise<RpcHttpResponse> {
+    this.getRequests.push(request);
+    return this.#nextResponse();
+  }
+
+  #nextResponse(): RpcHttpResponse {
     if (this.failWith !== null) throw this.failWith;
     const next = this.#responses.shift();
     if (next === undefined) {
-      throw new Error(`StubTransport: keine Antwort mehr in der Warteschlange (Request ${this.requests.length})`);
+      const count = this.requests.length + this.getRequests.length;
+      throw new Error(`StubTransport: keine Antwort mehr in der Warteschlange (Request ${count})`);
     }
     const response: RpcHttpResponse = { status: next.status ?? 200, body: next.body };
     return next.setCookie === undefined ? response : { ...response, setCookie: next.setCookie };

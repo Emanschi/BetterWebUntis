@@ -14,8 +14,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { SESSION_COOKIE } from '../api/client';
 import { createMockState, handleRpc, type MockServerState } from './rpcHandler';
+import { mockExamsRest } from './examsRestMock';
 
 const JSONRPC_PATH = '/WebUntis/jsonrpc.do';
+/** Undokumentierter REST-Endpunkt (siehe api/examsRest.ts) — kein Teil der 2018er-Doku. */
+const EXAMS_REST_PATH = '/WebUntis/api/exams';
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -41,7 +44,7 @@ function setCors(req: IncomingMessage, res: ServerResponse): void {
   const origin = req.headers['origin'];
   if (typeof origin === 'string') res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
   res.setHeader('Vary', 'Origin');
 }
@@ -56,10 +59,21 @@ export function createMockHttpServer(state: MockServerState = createMockState())
       return;
     }
 
-    const path = (req.url ?? '').split('?')[0];
+    const url = new URL(req.url ?? '', 'http://mock.local');
+    const path = url.pathname;
+
+    if (req.method === 'GET' && path === EXAMS_REST_PATH) {
+      handleExamsRest(state, req, url, res);
+      return;
+    }
+
     if (req.method !== 'POST' || path !== JSONRPC_PATH) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH}` }));
+      res.end(
+        JSON.stringify({
+          error: `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH} oder GET ${EXAMS_REST_PATH}`,
+        }),
+      );
       return;
     }
 
@@ -112,5 +126,28 @@ export function createMockHttpServer(state: MockServerState = createMockState())
   });
 }
 
+/**
+ * Simuliert den undokumentierten REST-Endpunkt (siehe api/examsRest.ts). Das reale
+ * Fehlerverhalten bei fehlender Session wurde nie gemessen — 401 ist eine plausible,
+ * aber nicht verifizierte Annahme, siehe examsRest.ts.
+ */
+function handleExamsRest(state: MockServerState, req: IncomingMessage, url: URL, res: ServerResponse): void {
+  const sessionId = readSessionCookie(req);
+  if (sessionId === undefined || !state.sessions.has(sessionId)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not authenticated (Annahme, real nie gemessen — siehe examsRest.ts)' }));
+    return;
+  }
+
+  const startDate = Number(url.searchParams.get('startDate') ?? 0);
+  const endDate = Number(url.searchParams.get('endDate') ?? 99999999);
+  const exams = mockExamsRest(startDate, endDate);
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ data: { exams } }));
+  // eslint-disable-next-line no-console -- Mock-Server-Log ist gewollt, kein Produktionscode.
+  console.log(`  GET ${EXAMS_REST_PATH.padEnd(24)} OK — ${exams.length} Pruefungen`);
+}
+
 export { createMockState, type MockServerState } from './rpcHandler';
-export { JSONRPC_PATH };
+export { JSONRPC_PATH, EXAMS_REST_PATH };

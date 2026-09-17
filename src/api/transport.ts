@@ -18,6 +18,12 @@ export interface RpcHttpRequest {
   headers: Record<string, string>;
 }
 
+/** Wie RpcHttpRequest, aber ohne Body — für GET-Aufrufe gegen REST-Endpunkte (siehe api/examsRest.ts). */
+export interface RpcHttpGetRequest {
+  url: string;
+  headers: Record<string, string>;
+}
+
 export interface RpcHttpResponse {
   status: number;
   body: string;
@@ -33,6 +39,8 @@ export interface RpcTransport {
    */
   readonly canSetCookieHeader: boolean;
   send(request: RpcHttpRequest): Promise<RpcHttpResponse>;
+  /** GET ohne JSON-RPC-Umschlag — für undokumentierte REST-Endpunkte unter derselben Basis. */
+  sendGet(request: RpcHttpGetRequest): Promise<RpcHttpResponse>;
 }
 
 /** Läuft der Code in einem Browser-Dokument (im Gegensatz zu Node oder einer nativen WebView-Bridge)? */
@@ -74,25 +82,33 @@ export class FetchTransport implements RpcTransport {
   }
 
   async send(request: RpcHttpRequest): Promise<RpcHttpResponse> {
+    return this.#doFetch(request.url, 'POST', request.headers, request.body);
+  }
+
+  async sendGet(request: RpcHttpGetRequest): Promise<RpcHttpResponse> {
+    return this.#doFetch(request.url, 'GET', request.headers);
+  }
+
+  async #doFetch(url: string, method: string, headers: Record<string, string>, body?: string): Promise<RpcHttpResponse> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
     try {
-      const response = await this.#fetch(request.url, {
-        method: 'POST',
-        headers: request.headers,
-        body: request.body,
+      const response = await this.#fetch(url, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body }),
         credentials: this.#credentials,
         signal: controller.signal,
       });
-      const body = await response.text();
+      const responseBody = await response.text();
       // getSetCookie() gibt es nur außerhalb des Browsers; im Browser ist Set-Cookie
       // ein Forbidden Response Header und die Liste bleibt leer.
       const setCookie = typeof response.headers.getSetCookie === 'function'
         ? response.headers.getSetCookie()
         : [];
       return setCookie.length > 0
-        ? { status: response.status, body, setCookie }
-        : { status: response.status, body };
+        ? { status: response.status, body: responseBody, setCookie }
+        : { status: response.status, body: responseBody };
     } finally {
       clearTimeout(timer);
     }
@@ -119,23 +135,18 @@ export interface CapacitorHttpLike {
  * Browser-CORS-Policy, deshalb ist hier kein Proxy nötig.
  */
 export function createCapacitorTransport(http: CapacitorHttpLike): RpcTransport {
+  async function doRequest(method: string, url: string, headers: Record<string, string>, data?: string): Promise<RpcHttpResponse> {
+    const response = await http.request({ url, method, headers, data: data ?? '', responseType: 'text' });
+    const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    const raw = response.headers['set-cookie'] ?? response.headers['Set-Cookie'];
+    return raw === undefined ? { status: response.status, body } : { status: response.status, body, setCookie: [raw] };
+  }
+
   return {
     name: 'capacitor',
     canSetCookieHeader: true,
-    async send(request) {
-      const response = await http.request({
-        url: request.url,
-        method: 'POST',
-        headers: request.headers,
-        data: request.body,
-        responseType: 'text',
-      });
-      const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-      const raw = response.headers['set-cookie'] ?? response.headers['Set-Cookie'];
-      return raw === undefined
-        ? { status: response.status, body }
-        : { status: response.status, body, setCookie: [raw] };
-    },
+    send: (request) => doRequest('POST', request.url, request.headers, request.body),
+    sendGet: (request) => doRequest('GET', request.url, request.headers),
   };
 }
 

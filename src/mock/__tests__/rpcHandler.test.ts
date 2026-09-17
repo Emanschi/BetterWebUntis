@@ -108,7 +108,15 @@ describe('getTimetable — Randfaelle', () => {
       params: { options: { element: { id, type }, startDate: RANGE_START, endDate: RANGE_END, showSubstText: true, showInfo: true } },
     });
     if (!('result' in out.envelope)) throw new Error('erwartetes result fehlt');
-    return out.envelope.result as Array<{ code?: string; lstype?: string; date: number; startTime: number; su?: Array<{id:number}>; te?: Array<{id:number}> }>;
+    return out.envelope.result as Array<{
+      code?: string;
+      lstype?: string;
+      info?: string;
+      date: number;
+      startTime: number;
+      su?: Array<{ id: number }>;
+      te?: Array<{ id: number }>;
+    }>;
   }
 
   it('enthaelt einen Entfall (code: cancelled)', () => {
@@ -122,9 +130,15 @@ describe('getTimetable — Randfaelle', () => {
     expect(irregular.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('enthaelt eine Pruefung (lstype: ex)', () => {
+  it('enthaelt eine Pruefungsstunde — ohne lstype/code, nur ein freier info-Text', () => {
+    // Gemessen am echten Server (2026-09-17, siehe TESTING.md): eine echte Pruefungsstunde
+    // hat weder lstype noch code, nur einen freien info-Text. Der Mock bildet das jetzt so
+    // nach, statt (wie zuerst angenommen) lstype "ex" zu setzen — siehe IDEEN.md B3.
     const periods = timetableFor('mmuster', 'test1234', 501, 5);
-    expect(periods.some((p) => p.lstype === 'ex')).toBe(true);
+    const exam = periods.find((p) => p.info === '1. Schularbeit');
+    expect(exam).toBeDefined();
+    expect(exam?.lstype).toBeUndefined();
+    expect(exam?.code).toBeUndefined();
   });
 
   it('enthaelt eine Doppelstunde (zwei direkt aufeinanderfolgende Perioden, gleiches Fach/Lehrer)', () => {

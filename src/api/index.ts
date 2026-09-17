@@ -11,6 +11,12 @@ export * from './errors';
 export * from './transport';
 export * from './client';
 export * as api from './methods';
+/**
+ * Undokumentierte REST-Endpunkte (kein Teil der 2018er JSON-RPC-Doku), bewusst unter
+ * einem eigenen Namensraum statt in `api`, damit an jeder Aufrufstelle sichtbar bleibt,
+ * welche Anfragen dokumentiert sind und welche nicht. Siehe examsRest.ts.
+ */
+export * as restApi from './examsRest';
 
 import { WebUntisClient, directEndpoint, type WebUntisClientOptions } from './client';
 import { FetchTransport, createCapacitorTransport, type CapacitorHttpLike } from './transport';

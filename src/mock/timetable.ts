@@ -8,7 +8,8 @@
  *   - Raumänderung           (Freitag, 3. Stunde — code "irregular", Raumwechsel)
  *   - Doppelstunde            (Montag 1./2. sowie Donnerstag 6./7. Stunde)
  *   - Schularbeit (Prüfung)  (5 feste Donnerstags-Termine im Schuljahr, siehe FIXED_EXAM_DATES —
- *                            lstype "ex" + getExams-Eintrag; NICHT wöchentlich)
+ *                            NICHT wöchentlich; im Stundenplan nur ein freier info-Text,
+ *                            kein lstype/code — siehe RawPeriod.isExamSlot und examsRestMock.ts)
  *   - Sprechstunde           (Dienstag, Lehrer-Ansicht — lstype "oh", ohne Klassenbezug)
  *   - Bereitschaft           (Freitag, Lehrer-Ansicht — lstype "sb")
  *   - Ferientag               (siehe HOLIDAYS in schoolData.ts — an dem Tag keine Perioden)
@@ -173,6 +174,16 @@ interface RawPeriod {
   /** Nur gesetzt bei Vertretung/Raumänderung — Id des ursprünglichen Elements. */
   orgTeacherId?: number;
   orgRoomId?: number;
+  /**
+   * Nur intern für die `getExams`/`getExamTypes`-Simulation (Doku Abschnitt 21/22) —
+   * KEIN Feld, das der echte Server über `getTimetable` liefert. Gemessen am 2026-09-17
+   * (siehe TESTING.md): eine echte Prüfungsstunde hatte weder `lstype` noch `code`, nur
+   * einen freien `info`-Text. Die App liest Prüfungen deshalb inzwischen über den
+   * REST-Workaround (`api/examsRest.ts`), nicht mehr über `lstype === 'ex'` — dieses Feld
+   * dient nur noch dazu, `getExams`/`getExamTypes` selbst weiter simulierbar zu halten,
+   * für Konten, die dafür (anders als das gemessene Schüler-Konto) ein Recht hätten.
+   */
+  isExamSlot?: true;
 }
 
 function instantiateSlot(slot: WeeklySlot, date: WuDate): RawPeriod {
@@ -213,13 +224,10 @@ function instantiateSlot(slot: WeeklySlot, date: WuDate): RawPeriod {
         info: 'K201 wegen Sanierung gesperrt',
       };
     case 'exam': {
+      // Kein lstype/code — siehe RawPeriod.isExamSlot: die reale Stunde ist strukturell
+      // nicht von einer normalen zu unterscheiden, nur der freie info-Text verraet sie.
       const ordinal = FIXED_EXAM_DATES.indexOf(date) + 1; // 1-basiert, nur fuer feste Termine aufgerufen
-      return {
-        ...base,
-        lstype: 'ex',
-        lstext: 'Schularbeit',
-        info: `Angewandte Mathematik — ${ordinal}. Schularbeit`,
-      };
+      return { ...base, isExamSlot: true, info: `${ordinal}. Schularbeit` };
     }
     default:
       return base;
@@ -435,7 +443,7 @@ export function toSubstitution(raw: RawPeriod): Substitution | undefined {
 
 /** Doku Abschnitt 21. Eine Schularbeit je Woche (Donnerstag) mit examTypeId 1. */
 export function toExam(raw: RawPeriod): Exam | undefined {
-  if (raw.lstype !== 'ex' || raw.klasseId === undefined || raw.subjectId === undefined) return undefined;
+  if (raw.isExamSlot !== true || raw.klasseId === undefined || raw.subjectId === undefined) return undefined;
   return {
     id: raw.id,
     classes: [raw.klasseId],
@@ -497,4 +505,4 @@ export function mockExams(examTypeId: number, startDate: WuDate, endDate: WuDate
     .filter((e): e is Exam => e !== undefined);
 }
 
-export { KLASSE_ID, STUDENT_ID };
+export { KLASSE_ID, STUDENT_ID, FIXED_EXAM_DATES };

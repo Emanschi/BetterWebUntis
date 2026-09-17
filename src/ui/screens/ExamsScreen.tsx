@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useSessionStore } from '../../state/sessionStore';
-import { api } from '../../api/index';
+import { api, restApi } from '../../api/index';
 import { formatWuDate, formatWuTime, toWuDate, wuTimeToMinutes } from '../../api/format';
-import type { Period, Schoolyear, WuDate } from '../../api/types';
-import { examExtraText, examPeriods } from '../../domain/timetable';
-import { buildExamsIcs, type ExamIcsEntry } from '../../domain/ics';
+import type { RestExam } from '../../api/examsRest';
+import type { Schoolyear, WuDate } from '../../api/types';
+import { buildExamsIcs } from '../../domain/ics';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
@@ -31,17 +31,15 @@ function defaultSchoolyearId(schoolyears: readonly Schoolyear[], today: WuDate):
   return [...schoolyears].toSorted((a, b) => b.startDate - a.startDate)[0]?.id;
 }
 
-function subjectName(period: Period): string {
-  return period.su?.[0]?.longname ?? period.su?.[0]?.name ?? 'Unbekanntes Fach';
-}
-
 /**
- * Doku Abschnitt 21/22 (`getExams`/`getExamTypes`) sind für Schüler-Konten an der HTL
- * St. Pölten gemessen gesperrt (Code -8509, siehe TESTING.md Abschnitt 3+"Nutzer-Feedback").
- * Die originale WebUntis-Oberfläche zeigt Prüfungen für genau dasselbe Konto trotzdem an —
- * sie markiert Prüfungsstunden offenbar im Stundenplan selbst (lstype "ex"). Deshalb: über
- * `getTimetable` für ein ganzes Schuljahr iterieren und auf lstype "ex" filtern, statt
- * `getExams` zu rufen. Details und Hintergrund: IDEEN.md B3.
+ * Prüfungen über einen undokumentierten REST-Endpunkt (`api/examsRest.ts`), nicht über
+ * das dokumentierte `getExams`/`getExamTypes` (beide für echte Schüler-Konten gesperrt,
+ * Code -8509) und auch nicht über ein Feld im Stundenplan (echte Prüfungsstunden haben
+ * dort weder `lstype` noch `code`, nur einen freien Info-Text — gemessen 2026-09-17).
+ *
+ * Der Nutzer hat den Endpunkt selbst aus den Browser-DevTools der originalen WebUntis-
+ * Oberfläche kopiert und dessen Nutzung ausdrücklich freigegeben. Details, Risiko und die
+ * gemessene Beispielantwort: `api/examsRest.ts`, IDEEN.md B3.
  *
  * Ein Schuljahr auf einmal (nicht "alle Prüfungen aller Jahre"), damit die Antwort auch bei
  * mehreren Schuljahren in der Historie überschaubar bleibt — Auswahl über ein Dropdown.
@@ -51,9 +49,7 @@ function subjectName(period: Period): string {
  */
 export function ExamsScreen() {
   const client = useSessionStore((s) => s.client);
-  const personType = useSessionStore((s) => s.personType);
   const personId = useSessionStore((s) => s.personId);
-  const element = personType !== undefined && personId !== undefined ? { id: personId, type: personType } : undefined;
 
   const [selectedSchoolyearId, setSelectedSchoolyearId] = useState<number | undefined>(undefined);
 
@@ -72,35 +68,24 @@ export function ExamsScreen() {
   const selectedSchoolyear = schoolyearsQuery.data?.find((y) => y.id === effectiveSchoolyearId);
 
   const examsQuery = useQuery({
-    queryKey: ['examPeriods', element, selectedSchoolyear?.id],
-    enabled: client !== null && element !== undefined && selectedSchoolyear !== undefined,
+    queryKey: ['examsRest', personId, selectedSchoolyear?.id],
+    enabled: client !== null && personId !== undefined && selectedSchoolyear !== undefined,
     queryFn: async () => {
-      if (client === null || element === undefined || selectedSchoolyear === undefined) {
+      if (client === null || personId === undefined || selectedSchoolyear === undefined) {
         throw new Error('Keine aktive Sitzung.');
       }
-      const periods = await api.getTimetableCustom(client, {
-        element,
+      const exams = await restApi.getExamsRest(client, {
+        studentId: personId,
         startDate: selectedSchoolyear.startDate,
         endDate: selectedSchoolyear.endDate,
-        showInfo: true,
-        showSubstText: true,
-        showLsText: true,
-        subjectFields: ['id', 'name', 'longname'],
-        roomFields: ['id', 'name'],
-        klasseFields: ['id', 'name'],
       });
-      return examPeriods(periods);
+      return [...exams].sort((a, b) => a.examDate - b.examDate || a.startTime - b.startTime);
     },
   });
 
   function handleExport(): void {
     if (examsQuery.data === undefined) return;
-    const entries: ExamIcsEntry[] = examsQuery.data.map((period) => ({
-      period,
-      subjectName: subjectName(period),
-      klasseNames: period.kl?.map((k) => k.name ?? (k.id !== undefined ? `Klasse ${k.id}` : 'Klasse')),
-    }));
-    downloadIcsFile('pruefungen.ics', buildExamsIcs(entries));
+    downloadIcsFile('pruefungen.ics', buildExamsIcs(examsQuery.data));
   }
 
   const isLoading = schoolyearsQuery.isPending || (selectedSchoolyear !== undefined && examsQuery.isPending);
@@ -111,7 +96,6 @@ export function ExamsScreen() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-fg">Prüfungen</h1>
-          <p className="text-sm text-fg-muted">Als Prüfung markierte Stunden im Stundenplan.</p>
         </div>
         <div className="flex items-center gap-2">
           {schoolyearsQuery.data !== undefined && schoolyearsQuery.data.length > 0 && (
@@ -149,20 +133,29 @@ export function ExamsScreen() {
 
       {examsQuery.isSuccess && examsQuery.data.length > 0 && (
         <div className="flex flex-col gap-2">
-          {examsQuery.data.map((period) => {
-            const extra = examExtraText(period);
-            const durationMinutes = wuTimeToMinutes(period.endTime) - wuTimeToMinutes(period.startTime);
+          {examsQuery.data.map((exam: RestExam) => {
+            const durationMinutes = wuTimeToMinutes(exam.endTime) - wuTimeToMinutes(exam.startTime);
             return (
-              <Card key={period.id} className="flex flex-col gap-1 text-sm">
+              <Card key={`${exam.examDate}-${exam.startTime}-${exam.subject}`} className="flex flex-col gap-1 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                  <span className="font-medium text-fg">{subjectName(period)}</span>
+                  <span className="font-medium text-fg">
+                    {exam.subject || exam.name}
+                    {exam.examType !== '' && <span className="ml-2 text-xs font-normal text-fg-muted">{exam.examType}</span>}
+                  </span>
                   <span className="text-fg-muted">
-                    {formatWuDate(period.date)} · {formatWuTime(period.startTime)}–{formatWuTime(period.endTime)} ·{' '}
+                    {formatWuDate(exam.examDate)} · {formatWuTime(exam.startTime)}–{formatWuTime(exam.endTime)} ·{' '}
                     {durationMinutes} Min.
-                    {period.ro?.[0]?.name !== undefined ? ` · ${period.ro[0].name}` : ''}
+                    {exam.rooms.length > 0 ? ` · ${exam.rooms.join(', ')}` : ''}
                   </span>
                 </div>
-                {extra !== undefined && <div className="text-fg-muted">{extra}</div>}
+                {(exam.teachers.length > 0 || exam.text !== '') && (
+                  <div className="text-fg-muted">
+                    {exam.teachers.length > 0 ? exam.teachers.join(', ') : undefined}
+                    {exam.teachers.length > 0 && exam.text !== '' ? ' · ' : ''}
+                    {exam.text}
+                  </div>
+                )}
+                {exam.grade !== '' && <div className="font-medium text-fg">Note: {exam.grade}</div>}
               </Card>
             );
           })}
