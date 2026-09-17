@@ -131,6 +131,8 @@ Drei offene Punkte:
 - **Produktions-Proxy (M11, noch nicht gebaut) deckt das noch nicht ab.** Der in B1/IDEEN.md geplante PHP-Proxy leitet laut Plan nur `jsonrpc.do` weiter, nicht beliebige `/WebUntis/*`-Pfade. Muss erweitert werden, bevor diese Endpunkte in Produktion funktionieren — im Dev-Vite-Proxy (leitet den ganzen `/WebUntis`-Präfix weiter) funktionieren sie schon.
 - **Abwesenheiten: nur ein Beispiel gemessen**, und zwar eine unbearbeitete (`isExcused: false, excuseStatus: null`). Wie eine bereits entschuldigte Abwesenheit aussieht, ist unklar.
 
+**R9 – Fachfarben-Override lokal gespeichert, `localStorage` statt Cookies (2026-09-17).** Nutzerwunsch: Fachfarben individuell anpassbar, dauerhaft gemerkt — auf der Website und später in der Capacitor-App (M9). Umgesetzt über `localStorage` (`state/subjectColorStore.ts`, gleiches Muster wie `themeStore.ts`), nicht Cookies: die Farben werden nie an den Server geschickt, Cookies wären bei jeder Proxy-Anfrage unnötiger Overhead. Funktioniert unverändert in Capacitor, weil das eine echte WebView mit eigenem persistentem `localStorage` einbettet — keine Sonderbehandlung nötig, aber erst nach M9 am echten Gerät verifizierbar. Falls `localStorage` unter Android nicht robust genug ist (Speicherdruck), wäre `@capacitor/preferences` der Ersatz — bewusst nicht vorab eingebaut, da M9 noch nicht existiert (YAGNI).
+
 ---
 
 ## 5. Meilensteine

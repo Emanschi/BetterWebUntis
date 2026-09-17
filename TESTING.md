@@ -409,3 +409,30 @@ Details: IDEEN.md B3b.
 - [ ] Test mit einem Lehrer-Konto gegen den echten Server (bisher nur simuliert über `aschmidt` im Mock)
 - [ ] Liefern Fächer/Klassen echte `foreColor`/`backColor`, oder greift bei dieser Schule durchgehend der generierte Fallback aus `domain/colors.ts`?
 - [ ] Was der ganztägige Eintrag ohne Fach/Raum inhaltlich bedeutet
+
+### Kalender-Redesign: gefüllte Fach-Karten, Detailansicht, Fachfarben-Einstellungen (2026-09-17)
+
+Nutzerwunsch: Fach-Karten ganzflächig statt nur mit Farbstreifen, Stunden zum Öffnen für
+längere Infos, und ein Einstellungs-Tab zum Anpassen der Fachfarben (lokal gespeichert,
+Web und später APK). Details und Hintergrund: IDEEN.md B6.
+
+**Manuell verifiziert** (Mock-Server, `mmuster`, Light **und** Dark Mode explizit
+durchgeklickt):
+- Stundenplan zeigt ausgefüllte Fach-Karten in beiden Themes, Text gut lesbar (automatische
+  Kontrastwahl über `domain/colors.ts`)
+- Entfall (Mittwoch) bleibt neutral/grau statt farbig, Vertretung/Raumänderung (Freitag)
+  zeigt die ⚠-Pille weiterhin klar lesbar auf der Fachfarbe
+- Klick auf die SEW-Doppelstunde (Montag) öffnet das Modal mit Fach (Langname), Datum,
+  Uhrzeit+Dauer (105 Min., korrekt für die zusammengefasste Doppelstunde), Lehrkraft
+  ("Schmidt"), Raum ("EDV-Saal 1"), Klasse ("3AHIF") — sowohl in Dark als auch Light Mode
+- "Farbe für SEW anpassen →" im Modal führt korrekt zu `/settings`
+- Einstellungen zeigt 7 Fächer (nicht das 8. Katalog-Fach "Physik", das absichtlich nirgends
+  für die Klasse eingeplant ist — Test dafür in `Settings.test.tsx`)
+- Farbwahl (Palette-Swatch) wirkt sofort auf **beiden** SEW-Blöcken im Stundenplan
+  (Montag und Mittwoch), bleibt nach Navigation zwischen Screens erhalten
+- "Zurücksetzen" stellt die generierte Fallback-Farbe wieder her, auch sofort sichtbar
+
+**Noch offen:**
+- [ ] Ob `localStorage` in der späteren Capacitor-App (M9, noch nicht gebaut) tatsächlich
+      robust genug ist, oder ob `@capacitor/preferences` nötig wird — lässt sich erst am
+      echten Gerät zeigen, siehe IDEEN.md B6

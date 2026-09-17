@@ -104,6 +104,10 @@ export const SUBJECTS: Subject[] = [
   { id: 5, name: 'AM', longName: 'Angewandte Mathematik', foreColor: '000000', backColor: '7dd3fc' },
   { id: 6, name: 'BSP', longName: 'Bewegung und Sport', foreColor: '000000', backColor: 'c4b5fd' },
   { id: 7, name: 'REL', longName: 'Religion', foreColor: '000000', backColor: 'f0abfc' },
+  // Bewusst NICHT in timetable.ts WEEKLY_TEMPLATE verplant — Fixture dafuer, dass
+  // Einstellungen/Fachfarben nur Faecher zeigt, die die Klasse tatsaechlich hat, nicht
+  // den ganzen Schulkatalog (siehe SettingsScreen.tsx, Settings.test.tsx).
+  { id: 8, name: 'PH', longName: 'Physik', foreColor: '000000', backColor: 'fbcfe8' },
 ];
 
 // ---------------------------------------------------------------------------
