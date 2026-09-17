@@ -107,6 +107,13 @@ Bestätigt auch die frühere Beobachtung: der Eintrag mit Status "?" aus dem all
 Nutzer-Feedback: die App soll vorerst ausschließlich Schüler-Konten unterstützen. Die Tabs "Meine Termine" (IDEEN.md A4, Pflichtpunkt 4 des ursprünglichen Auftrags) und "Profil" werden nicht gebraucht — beide Screens, ihre Routen und die zugehörige Domain-Funktion (`appointmentPeriods`) wurden entfernt, nicht nur ausgeblendet (Repo soll keinen toten Code tragen). Bei Bedarf über `git log` wiederherstellbar — die Funktion war vollständig getestet.
 **Achtung:** A4 war Pflichtpunkt 4 des ursprünglichen Auftrags — diese Entfernung ist eine bewusste, aber vorläufige Scope-Reduktion ("vorerst"), keine endgültige Streichung der Anforderung.
 
+### B5 – Scope-Entscheidung 2026-09-17: Elementwechsel nur noch Klassen
+Nutzer-Feedback: bei "Anderen Plan ansehen" (M6) nur die Klassen-Funktion behalten, die Lehrer-/Fach-/Raum-Suche entfernen. `ElementPicker.tsx` hatte vier Tabs (Klasse/Lehrer/Fach/Raum); jetzt gibt es nur noch das Klassen-Suchfeld, keine Tabs mehr. `elementRoutes.ts`s Segment-Zuordnung (`ELEMENT_TYPE_SEGMENTS`/`ELEMENT_TYPE_LABELS`) entsprechend auf `klasse` gekürzt — als Map belassen (nicht hart verdrahtet), da die eigentliche Trennung URL-Segment ↔ `ElementType` ↔ Anzeigename auch mit einem Eintrag sinnvoll bleibt.
+
+Nebeneffekt: `getTeachers` war für echte Schüler-Konten ohnehin gesperrt (Code -8509, siehe TESTING.md) — der Lehrer-Tab wäre für den Hauptanwendungsfall (Schüler-Konto) real nie benutzbar gewesen. `getSubjects`/`getRooms` funktionieren dagegen real (waren also keine kaputte Funktion, sondern eine bewusst nicht mehr gewollte). Die API-Methoden selbst (`getTeachers`/`getSubjects`/`getRooms` in `api/methods.ts`) bleiben unverändert bestehen, nur ihre einzige UI-Aufrufstelle ist weg — falls sich das später ändert, sind sie sofort wieder nutzbar.
+
+Die Routen `/timetable/lehrer/:id` etc. existieren technisch nicht mehr (nicht mehr in `ELEMENT_TYPE_SEGMENTS`) — ein direkt eingegebener Link dieser Art zeigt jetzt denselben "ungültiger Link"-Fehler wie ein Tippfehler, statt eines Absturzes.
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.

@@ -35,7 +35,7 @@ async function login(user: ReturnType<typeof userEvent.setup>, name = 'mmuster',
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Stundenplan' })).toBeInTheDocument());
 }
 
-describe('Elementwechsel (M6)', () => {
+describe('Elementwechsel (M6, seit 2026-09-17 nur noch Klassen — siehe IDEEN.md)', () => {
   it('zeigt ueber "Anderen Plan ansehen" eine Klassenliste und wechselt beim Klick die Ansicht', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -43,7 +43,6 @@ describe('Elementwechsel (M6)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Anderen Plan ansehen' }));
 
-    // Klasse ist der Default-Tab — 2BHIF aus schoolData.ts sollte in der Liste stehen.
     expect(await screen.findByRole('button', { name: /2BHIF/ })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /2BHIF/ }));
@@ -67,30 +66,25 @@ describe('Elementwechsel (M6)', () => {
     expect(screen.queryByRole('link', { name: '← Mein Plan' })).not.toBeInTheDocument();
   });
 
-  it('kann zwischen Klasse/Lehrer/Fach/Raum wechseln und filtern', async () => {
-    // Lehrer-Konto: getTeachers ist beim echten Schueler-Konto laut Smoke-Test (M10)
-    // NICHT erlaubt (siehe accounts.ts) — dafuer eigener Test unten.
+  it('filtert die Klassenliste', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await login(user, 'aschmidt', 'test1234');
+    await login(user);
     await user.click(screen.getByRole('button', { name: 'Anderen Plan ansehen' }));
+    await screen.findByRole('button', { name: /2BHIF/ });
 
-    await user.click(screen.getByRole('tab', { name: 'Lehrer' }));
-    expect(await screen.findByRole('button', { name: /Huber/ })).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText('Lehrer suchen'), 'Weber');
-    expect(screen.getByRole('button', { name: /Weber/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Huber/ })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Klasse suchen'), '2BHIF');
+    expect(screen.getByRole('button', { name: /2BHIF/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /3AHIF/ })).not.toBeInTheDocument();
   });
 
-  it('Schueler-Konto sieht einen Rechte-Hinweis statt eines Absturzes auf dem Lehrer-Tab', async () => {
+  it('zeigt keine Lehrer-/Fach-/Raum-Tabs mehr an', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await login(user); // Default: mmuster (Schueler)
+    await login(user);
     await user.click(screen.getByRole('button', { name: 'Anderen Plan ansehen' }));
+    await screen.findByRole('button', { name: /2BHIF/ });
 
-    await user.click(screen.getByRole('tab', { name: 'Lehrer' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('nicht die nötigen Rechte');
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
   });
 });

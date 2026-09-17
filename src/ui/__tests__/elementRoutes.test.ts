@@ -25,12 +25,12 @@ describe('elementRoutes', () => {
 
   it('baut den Stundenplan-Pfad', () => {
     expect(timetablePathFor(ElementType.KLASSE, 102)).toBe('/timetable/klasse/102');
-    expect(timetablePathFor(ElementType.TEACHER, 12)).toBe('/timetable/lehrer/12');
-    expect(timetablePathFor(ElementType.SUBJECT, 4)).toBe('/timetable/fach/4');
-    expect(timetablePathFor(ElementType.ROOM, 3)).toBe('/timetable/raum/3');
   });
 
-  it('faellt fuer nicht routbare Typen auf /timetable zurueck', () => {
+  it('faellt fuer nicht routbare Typen auf /timetable zurueck — Lehrer/Fach/Raum bewusst entfernt (IDEEN.md)', () => {
     expect(timetablePathFor(ElementType.STUDENT, 501)).toBe('/timetable');
+    expect(timetablePathFor(ElementType.TEACHER, 12)).toBe('/timetable');
+    expect(timetablePathFor(ElementType.SUBJECT, 4)).toBe('/timetable');
+    expect(timetablePathFor(ElementType.ROOM, 3)).toBe('/timetable');
   });
 });
