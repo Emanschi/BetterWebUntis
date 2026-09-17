@@ -350,4 +350,23 @@ das `getTimetable` sowieso liefert und für das dieses Konto nachweislich ein Re
 filtert auf `lstype === "ex"`, statt `getExams` zu rufen. Details: IDEEN.md B3.
 
 **Abwesenheiten bleiben ungelöst** — `getTimetableWithAbsences` ist gesperrt, und der
-Stundenplan hat kein äquivalentes Feld dafür. Details: IDEEN.md B3.
+Stundenplan hat kein äquivalentes Feld dafür. Details: IDEEN.md B3. Auf Nutzerwunsch
+(2026-09-17) ist der Tab jetzt entfernt statt eine Fehlermeldung zu zeigen.
+
+### Nutzer-Feedback 2026-09-17 (zweite Runde): lstype "ex" zeigt beim echten Server keine Treffer
+
+Schuljahr-Filter funktioniert (vom Nutzer bestätigt), aber "Keine Prüfungen in diesem
+Schuljahr" trotz einer laut Original-App real existierenden Prüfung (18.09.2026, 12:20–13:10,
+Fach NW2, siehe Screenshot vom Nutzer weiter oben). `lstype === "ex"` war eine aus der Doku
+plausible, aber nie am echten Server verifizierte Annahme.
+
+`scripts/smoke-test.ts` hat jetzt einen Diagnose-Block: lädt das komplette aktuelle Schuljahr
+über `getTimetable`, zählt die Verteilung von `lstype`/`code`/`activityType` über alle Perioden
+und sucht gezielt nach dem bekannten Termin, um dessen volle Rohdaten auszugeben.
+
+**Noch offen, braucht einen erneuten `npm run smoke`-Lauf vom Nutzer:**
+- [ ] Taucht der 18.09.2026-Termin in `getTimetable` überhaupt auf?
+- [ ] Falls ja: welches Feld markiert ihn tatsächlich als Prüfung (falls nicht `lstype`)?
+- [ ] Falls nein: die Prüfung kommt aus einer Quelle, die `getTimetable` gar nicht sieht —
+      dann bräuchte es eine Grundsatzentscheidung über undokumentierte Endpunkte (IDEEN.md A1),
+      kein Code-Fix mehr.

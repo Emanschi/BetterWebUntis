@@ -22,6 +22,7 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | M10 Echter Server-Test | ✅ 215 Tests, 2 Bugs gefunden+behoben |
 | Nutzer-Feedback: Scope auf Schüler-Konten, "Termine"/"Profil" entfernt | ✅ 210 Tests |
 | Prüfungen ohne getExams: Workaround über Stundenplan (lstype "ex") | ✅ 217 Tests |
+| Nutzer-Feedback: Abwesenheiten-Tab entfernt, Prüfungen-Nachmessung läuft | ✅ 215 Tests |
 | M9, M11 | offen |
 
 ## Befehle
