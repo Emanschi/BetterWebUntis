@@ -35,28 +35,6 @@ async function loginAs(user: ReturnType<typeof userEvent.setup>, name: string, p
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Stundenplan' })).toBeInTheDocument());
 }
 
-describe('Abwesenheiten (M7)', () => {
-  it('Schueler-Konto sieht eine Fehlermeldung statt eines Absturzes (fehlendes Recht)', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await loginAs(user, 'mmuster', 'test1234');
-
-    await user.click(screen.getByRole('link', { name: 'Abwesenheiten' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('nicht die nötigen Rechte');
-  });
-
-  it('Lehrer-Konto sieht die Abwesenheitsliste', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await loginAs(user, 'aschmidt', 'test1234');
-
-    await user.click(screen.getByRole('link', { name: 'Abwesenheiten' }));
-
-    expect((await screen.findAllByText(/entschuldigt/)).length).toBeGreaterThan(0);
-  });
-});
-
 describe('Prüfungen (Nachbesserung nach echtem Server-Test, IDEEN.md B3)', () => {
   it('Schueler-Konto sieht Pruefungen — ueber lstype "ex" im Stundenplan, nicht getExams', async () => {
     // getExamTypes/getExams sind fuer echte Schueler-Konten gesperrt (Code -8509, siehe

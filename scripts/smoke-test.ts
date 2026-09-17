@@ -160,6 +160,52 @@ try {
     console.log('     oder "examinations read" fehlt diesem Konto tatsaechlich auch.');
   }
 
+  // --- 4c) Diagnose: wie markiert der echte Server Pruefungsstunden? -----
+  // ExamsScreen.tsx geht davon aus, dass Pruefungsstunden lstype "ex" haben (Doku
+  // Abschnitt 14/15) — das war eine Vermutung, keine Messung. Nutzer-Test zeigt: der
+  // Pruefungen-Screen findet nichts, obwohl laut Original-App am 18.09.2026, 12:20-13:10
+  // (Fach NW2) eine Pruefung stattfindet. Dieser Block laedt das ganze aktuelle Schuljahr
+  // (wie ExamsScreen.tsx) und prueft, ob/wie sich diese Stunde von einer normalen
+  // unterscheidet — Ergebnis gehoert nach TESTING.md / IDEEN.md B3.
+  console.log('\nDiagnose: Pruefungs-Markierung im Stundenplan (ganzes Schuljahr geladen)');
+  const yearPeriods = await api.getTimetableCustom(client, {
+    element: { id: session.personId, type: session.personType },
+    startDate: schoolyear.startDate,
+    endDate: schoolyear.endDate,
+    showInfo: true,
+    showSubstText: true,
+    showLsText: true,
+    showLsNumber: true,
+    showStudentgroup: true,
+    subjectFields: ['id', 'name', 'longname'],
+    teacherFields: ['id', 'name'],
+    roomFields: ['id', 'name'],
+    klasseFields: ['id', 'name'],
+  });
+  console.log(`  ${yearPeriods.length} Perioden im ganzen Schuljahr geladen.`);
+
+  const countBy = (values: Array<string | undefined>) => {
+    const counts = new Map<string, number>();
+    for (const v of values) counts.set(v ?? '(leer)', (counts.get(v ?? '(leer)') ?? 0) + 1);
+    return Object.fromEntries(counts);
+  };
+  console.log('  lstype-Verteilung:', countBy(yearPeriods.map((p) => p.lstype)));
+  console.log('  code-Verteilung:', countBy(yearPeriods.map((p) => p.code)));
+  console.log('  activityType-Verteilung:', countBy(yearPeriods.map((p) => p.activityType)));
+
+  // Bekannter Pruefungstermin aus der Original-App (Screenshot): 18.09.2026, 12:20-13:10, Fach NW2.
+  const known = yearPeriods.filter((p) => p.date === 20260918 && p.startTime >= 1150 && p.startTime <= 1230);
+  if (known.length === 0) {
+    console.log('  -> Der bekannte Termin (18.09.2026, ~12:20) taucht in getTimetable GAR NICHT auf.');
+    console.log('     Moegliche Erklaerung: die Pruefung ist keine normale Timetable-Periode, sondern');
+    console.log('     kommt aus einer separaten Quelle (z. B. der neueren REST-API), die getTimetable');
+    console.log('     gar nicht sieht. Naechster Schritt waere dann eine Grundsatzentscheidung ueber');
+    console.log('     undokumentierte Endpunkte (siehe IDEEN.md A1), kein reiner Code-Fix mehr.');
+  } else {
+    console.log(`  Gefunden (${known.length}x) — volle Rohdaten:`);
+    for (const p of known) console.log('   ', JSON.stringify(p));
+  }
+
   // --- 5) logout ---------------------------------------------------------
   await api.logout(client);
   check('\nlogout', !client.isAuthenticated);
