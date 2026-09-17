@@ -24,6 +24,7 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | Nutzer-Feedback: Abwesenheiten-Tab entfernt | ✅ 215 Tests |
 | Prüfungen: undokumentierter REST-Endpunkt (getExams/lstype funktionieren real nicht) | ✅ 222 Tests |
 | Abwesenheiten: derselbe Weg, Tab wieder da | ✅ 231 Tests |
+| Elementwechsel: nur noch Klassen (Lehrer/Fach/Raum entfernt) | ✅ 231 Tests |
 | M9, M11 | offen |
 
 ## Befehle

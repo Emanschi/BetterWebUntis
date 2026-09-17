@@ -1,24 +1,22 @@
 /**
  * URL-Segmente für den Elementwechsel (M6): "welchen Stundenplan sehe ich mir an".
  * Lesbare deutsche Wörter in der URL statt der rohen ElementType-Zahlen aus der API.
+ *
+ * Nur noch "klasse" (Nutzerwunsch 2026-09-17): Lehrer-/Fach-/Raum-Suche entfernt, siehe
+ * IDEEN.md. Als Map statt hartem Einzelwert belassen — der eigentliche Zweck (URL-Segment
+ * ↔ numerischer ElementType ↔ Anzeigename trennen) bleibt auch mit einem Eintrag richtig.
  */
 
 import { ElementType } from '../api/types';
 
 export const ELEMENT_TYPE_SEGMENTS = {
   klasse: ElementType.KLASSE,
-  lehrer: ElementType.TEACHER,
-  fach: ElementType.SUBJECT,
-  raum: ElementType.ROOM,
 } as const;
 
 export type ElementTypeSegment = keyof typeof ELEMENT_TYPE_SEGMENTS;
 
 export const ELEMENT_TYPE_LABELS: Record<ElementTypeSegment, string> = {
   klasse: 'Klasse',
-  lehrer: 'Lehrer',
-  fach: 'Fach',
-  raum: 'Raum',
 };
 
 export function segmentForElementType(type: number): ElementTypeSegment | undefined {
