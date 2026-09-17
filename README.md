@@ -23,6 +23,7 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | Nutzer-Feedback: Scope auf Schüler-Konten, "Termine"/"Profil" entfernt | ✅ 210 Tests |
 | Nutzer-Feedback: Abwesenheiten-Tab entfernt | ✅ 215 Tests |
 | Prüfungen: undokumentierter REST-Endpunkt (getExams/lstype funktionieren real nicht) | ✅ 222 Tests |
+| Abwesenheiten: derselbe Weg, Tab wieder da | ✅ 231 Tests |
 | M9, M11 | offen |
 
 ## Befehle
@@ -49,8 +50,8 @@ das Konto überhaupt aufrufen darf. Ergebnisse gehören nach `TESTING.md`.
 
 ```
 src/api/        JSON-RPC-Layer — Typen, Transport, Client, Methoden (nur dokumentierte!)
-                Ausnahme: examsRest.ts (undokumentierter REST-Endpunkt, eigener Namensraum
-                "restApi", ausdrücklich freigegeben — siehe IDEEN.md B3)
+                Ausnahme: examsRest.ts/absencesRest.ts (undokumentierte REST-Endpunkte,
+                eigener Namensraum "restApi", ausdrücklich freigegeben — siehe IDEEN.md B3)
 src/domain/     Fachlogik: Wochenraster, Doppelstunden-Merge, Fachfarben, ICS (M8)
 src/ui/         Komponenten, Screens, Routing, AppShell
 src/state/      Zustand-Stores (Theme, Session) — kein Netzzugriff, nur über src/api

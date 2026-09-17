@@ -15,10 +15,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { SESSION_COOKIE } from '../api/client';
 import { createMockState, handleRpc, type MockServerState } from './rpcHandler';
 import { mockExamsRest } from './examsRestMock';
+import { mockAbsencesRest } from './absencesRestMock';
 
 const JSONRPC_PATH = '/WebUntis/jsonrpc.do';
-/** Undokumentierter REST-Endpunkt (siehe api/examsRest.ts) — kein Teil der 2018er-Doku. */
+/** Undokumentierte REST-Endpunkte (siehe api/examsRest.ts, api/absencesRest.ts) — kein Teil der 2018er-Doku. */
 const EXAMS_REST_PATH = '/WebUntis/api/exams';
+const ABSENCES_REST_PATH = '/WebUntis/api/classreg/absences/students';
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -63,7 +65,11 @@ export function createMockHttpServer(state: MockServerState = createMockState())
     const path = url.pathname;
 
     if (req.method === 'GET' && path === EXAMS_REST_PATH) {
-      handleExamsRest(state, req, url, res);
+      handleDateRangeRest(state, req, url, res, EXAMS_REST_PATH, mockExamsRest, 'exams');
+      return;
+    }
+    if (req.method === 'GET' && path === ABSENCES_REST_PATH) {
+      handleDateRangeRest(state, req, url, res, ABSENCES_REST_PATH, mockAbsencesRest, 'absences');
       return;
     }
 
@@ -71,7 +77,7 @@ export function createMockHttpServer(state: MockServerState = createMockState())
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          error: `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH} oder GET ${EXAMS_REST_PATH}`,
+          error: `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH}, GET ${EXAMS_REST_PATH} oder GET ${ABSENCES_REST_PATH}`,
         }),
       );
       return;
@@ -127,27 +133,37 @@ export function createMockHttpServer(state: MockServerState = createMockState())
 }
 
 /**
- * Simuliert den undokumentierten REST-Endpunkt (siehe api/examsRest.ts). Das reale
- * Fehlerverhalten bei fehlender Session wurde nie gemessen — 401 ist eine plausible,
- * aber nicht verifizierte Annahme, siehe examsRest.ts.
+ * Simuliert einen der undokumentierten REST-Endpunkte (siehe api/examsRest.ts,
+ * api/absencesRest.ts) — gleiches Muster für beide: `startDate`/`endDate` filtern, Ergebnis
+ * unter `wrapKey` verpackt (`{"data":{[wrapKey]:[...]}}`). Das reale Fehlerverhalten bei
+ * fehlender Session wurde nie gemessen — 401 ist eine plausible, aber nicht verifizierte
+ * Annahme.
  */
-function handleExamsRest(state: MockServerState, req: IncomingMessage, url: URL, res: ServerResponse): void {
+function handleDateRangeRest<T>(
+  state: MockServerState,
+  req: IncomingMessage,
+  url: URL,
+  res: ServerResponse,
+  pathLabel: string,
+  fetchItems: (startDate: number, endDate: number) => readonly T[],
+  wrapKey: string,
+): void {
   const sessionId = readSessionCookie(req);
   if (sessionId === undefined || !state.sessions.has(sessionId)) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'not authenticated (Annahme, real nie gemessen — siehe examsRest.ts)' }));
+    res.end(JSON.stringify({ error: 'not authenticated (Annahme, real nie gemessen)' }));
     return;
   }
 
   const startDate = Number(url.searchParams.get('startDate') ?? 0);
   const endDate = Number(url.searchParams.get('endDate') ?? 99999999);
-  const exams = mockExamsRest(startDate, endDate);
+  const items = fetchItems(startDate, endDate);
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ data: { exams } }));
+  res.end(JSON.stringify({ data: { [wrapKey]: items } }));
   // eslint-disable-next-line no-console -- Mock-Server-Log ist gewollt, kein Produktionscode.
-  console.log(`  GET ${EXAMS_REST_PATH.padEnd(24)} OK — ${exams.length} Pruefungen`);
+  console.log(`  GET ${pathLabel.padEnd(40)} OK — ${items.length} ${wrapKey}`);
 }
 
 export { createMockState, type MockServerState } from './rpcHandler';
-export { JSONRPC_PATH, EXAMS_REST_PATH };
+export { JSONRPC_PATH, EXAMS_REST_PATH, ABSENCES_REST_PATH };

@@ -120,10 +120,16 @@ Harte Regel: `ui/` und `domain/` reden **nie** direkt mit dem Netz, nur über `a
 
 **R7 – Rate-Limits.** WebUntis drosselt. Masterdata (Lehrer/Klassen/Fächer/Räume/Timegrid/Holidays) wird pro Schuljahr einmal geholt und lokal gecacht.
 
-**R8 – Undokumentierter REST-Endpunkt für Prüfungen, ausdrücklich freigegeben (2026-09-17).** Siehe R5: Die 2018er-JSON-RPC-Doku reicht für Prüfungen bei echten Schüler-Konten nicht aus. Der Nutzer hat aus den Browser-DevTools der originalen WebUntis-Oberfläche `GET /WebUntis/api/exams?startDate=…&endDate=…&studentId=…&withGrades=true&klasseId=-1` kopiert und dessen Nutzung freigegeben — Details und die gemessene Beispielantwort in `src/api/examsRest.ts`. Bewusst von `methods.ts` getrennt (eigener Namensraum `restApi`, siehe `api/index.ts`), damit an jeder Aufrufstelle sichtbar bleibt, was dokumentiert ist und was nicht.
-Zwei offene Punkte:
+**R8 – Undokumentierte REST-Endpunkte für Prüfungen UND Abwesenheiten, ausdrücklich freigegeben (2026-09-17).** Siehe R5/R6: Die 2018er-JSON-RPC-Doku reicht für beides bei echten Schüler-Konten nicht aus (`getExams`/`getExamTypes`/`getTimetableWithAbsences` alle gesperrt, Code -8509 — und kein Stundenplan-Feld hilft). Der Nutzer hat aus den Browser-DevTools der originalen WebUntis-Oberfläche zwei Endpunkte kopiert und deren Nutzung freigegeben:
+- `GET /WebUntis/api/exams?startDate=…&endDate=…&studentId=…&withGrades=true&klasseId=-1` — `src/api/examsRest.ts`
+- `GET /WebUntis/api/classreg/absences/students?startDate=…&endDate=…&studentId=…&excuseStatusId=-1` — `src/api/absencesRest.ts`
+
+Beide bewusst von `methods.ts` getrennt (gemeinsamer Namensraum `restApi`, siehe `api/restApi.ts`/`api/index.ts`), damit an jeder Aufrufstelle sichtbar bleibt, was dokumentiert ist und was nicht. `WebUntisClient.getRest()` bedient beide gleich (Cookie-Auth, Warteschlange/Drosselung geteilt mit `call()`).
+
+Drei offene Punkte:
 - **Fehlerformat ungemessen.** Nur grob als HTTP-Status behandelt (`WebUntisClient.getRest`), nicht mit der Rechte-Feinauflösung aus `errors.ts`.
-- **Produktions-Proxy (M11, noch nicht gebaut) deckt das noch nicht ab.** Der in B1/IDEEN.md geplante PHP-Proxy leitet laut Plan nur `jsonrpc.do` weiter, nicht beliebige `/WebUntis/*`-Pfade. Muss erweitert werden, bevor dieser Endpunkt in Produktion funktioniert — im Dev-Vite-Proxy (leitet den ganzen `/WebUntis`-Präfix weiter) funktioniert er schon.
+- **Produktions-Proxy (M11, noch nicht gebaut) deckt das noch nicht ab.** Der in B1/IDEEN.md geplante PHP-Proxy leitet laut Plan nur `jsonrpc.do` weiter, nicht beliebige `/WebUntis/*`-Pfade. Muss erweitert werden, bevor diese Endpunkte in Produktion funktionieren — im Dev-Vite-Proxy (leitet den ganzen `/WebUntis`-Präfix weiter) funktionieren sie schon.
+- **Abwesenheiten: nur ein Beispiel gemessen**, und zwar eine unbearbeitete (`isExcused: false, excuseStatus: null`). Wie eine bereits entschuldigte Abwesenheit aussieht, ist unklar.
 
 ---
 
