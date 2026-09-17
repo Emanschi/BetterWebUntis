@@ -80,10 +80,28 @@ Der Proxy hält **keinen** Zustand: er leitet den POST-Body an `jsonrpc.do` weit
 
 **Backlog-Idee (nicht beauftragt):** die neuen Prüfungsdaten mit dem Stundenplan kreuzreferenzieren, um Prüfungsstunden dort wieder optisch zu markieren (ging vorher über `lstype`, jetzt nicht mehr) — siehe Abschnitt C.
 
-### B3b – Abwesenheiten — Tab entfernt (Nutzer-Feedback 2026-09-17)
-`getTimetableWithAbsences` bleibt gesperrt (Code -8509), und anders als bei Prüfungen gibt es kein Stundenplan-Feld zum Umgehen. Die originale Oberfläche zeigt unter "Abwesenheiten" einen einzelnen, offenbar selbst meldbaren Eintrag mit Status "?" — das sieht nach einem separaten, in der 2018er-Doku nicht enthaltenen Workflow aus (Fehlzeiten-Selbstmeldung), nicht nach dem, was `getTimetableWithAbsences` eigentlich abbildet (von der Schule/Lehrkraft erfasste Abwesenheiten). Kein Workaround gefunden. Auf Nutzerwunsch komplett entfernt (`AbsencesScreen.tsx` gelöscht, Route/Nav raus) statt eine Fehlermeldung zu zeigen — die dokumentierte API-Methode selbst bleibt in `api/methods.ts`, falls sich das später ändert oder sich noch ein Weg findet (analog zu B3 wäre auch hier ein undokumentierter REST-Endpunkt denkbar, aber noch nicht gesucht).
+### B3b – Abwesenheiten — **gelöst, 2026-09-17 (derselbe Weg wie B3: undokumentierter REST-Endpunkt)**
+Erste Runde: `getTimetableWithAbsences` bleibt gesperrt (Code -8509), und anders als bei Prüfungen gab es kein Stundenplan-Feld zum Umgehen. Tab zunächst auf Nutzerwunsch entfernt.
 
-**Konsequenz für M11 (Kalenderabo):** der Feed kann für Prüfungen denselben REST-Workaround nutzen wie `ExamsScreen.tsx` — vorausgesetzt, der Produktions-Proxy wird entsprechend erweitert (siehe oben).
+Zweite Runde, direkt im Anschluss an B3: Da der REST-Workaround bei Prüfungen funktioniert hat, lag nahe, dass die "Abwesenheiten"-Seite der Original-Oberfläche denselben Aufbau hat. Der Nutzer hat selbst in den Browser-DevTools nachgesehen und den Endpunkt gefunden:
+
+```
+GET /WebUntis/api/classreg/absences/students?startDate=20260907&endDate=20270704&studentId=<eigene personId>&excuseStatusId=-1
+
+{"data":{"absences":[{"id":1350715,"startDate":20260911,"endDate":20260911,
+  "startTime":750,"endTime":915,"reasonId":0,"reason":"","text":"",
+  "isExcused":false,"excuseStatus":null,
+  "excuse":{"id":-1,"text":"","excuseDate":0,"excuseStatus":"","isExcused":false,"userId":-1,"username":""}}],
+  "absenceReasons":[],"excuseStatuses":null,"showAbsenceReasonChange":false,"showCreateAbsence":false}}
+```
+
+Bestätigt auch die frühere Beobachtung: der Eintrag mit Status "?" aus dem allerersten Screenshot entspricht genau `isExcused: false, excuseStatus: null` — eine noch nicht bearbeitete Abwesenheit, kein separater Selbstmelde-Workflow.
+
+**Umgesetzt:** `AbsencesScreen.tsx` wieder da (Route/Nav zurück), liest jetzt `restApi.getAbsencesRest()` (`api/absencesRest.ts`) statt `getTimetableWithAbsences`. Gleiche Schuljahr-Auswahl wie bei Prüfungen — dafür wurde `defaultSchoolyearId` aus `ExamsScreen.tsx` nach `domain/schoolyear.ts` extrahiert und ein gemeinsamer Hook/Component (`useSchoolyearSelection`, `SchoolyearSelect`) gebaut, den beide Screens nutzen. Zeigt Datum(-spanne), Uhrzeit, Dauer, Status (entschuldigt/nicht entschuldigt aus dem zuverlässigen `isExcused`-Boolean) und Grund/Text, falls vorhanden.
+
+**Bewusst nicht übernommen:** `createDate`/`lastUpdate` (Unix-Zeitstempel), `createdUser`/`updatedUser` (interne Kürzel der Schulverwaltung), `canEdit`, `interruptions`, `studentName`, das verschachtelte `excuse`-Objekt — dieselbe Begründung wie bei `examsRest.ts`. Nur ein Beispiel gemessen (eine unbearbeitete Abwesenheit) — wie eine bereits entschuldigte aussieht, ist unklar.
+
+**Konsequenz für M11 (Kalenderabo):** betrifft laut B2 nur Prüfungen, nicht Abwesenheiten — hier ohne Auswirkung.
 
 ### B4 – Scope-Entscheidung 2026-09-17: vorerst nur Schüler-Konten, "Termine" und "Profil" entfernt
 Nutzer-Feedback: die App soll vorerst ausschließlich Schüler-Konten unterstützen. Die Tabs "Meine Termine" (IDEEN.md A4, Pflichtpunkt 4 des ursprünglichen Auftrags) und "Profil" werden nicht gebraucht — beide Screens, ihre Routen und die zugehörige Domain-Funktion (`appointmentPeriods`) wurden entfernt, nicht nur ausgeblendet (Repo soll keinen toten Code tragen). Bei Bedarf über `git log` wiederherstellbar — die Funktion war vollständig getestet.

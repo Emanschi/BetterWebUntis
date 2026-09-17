@@ -374,13 +374,38 @@ das, was die "Prüfungen"-Seite der Original-App zeigt. Implementiert in `api/ex
 (eigener Namensraum `restApi`, bewusst getrennt von den dokumentierten Methoden), genutzt von
 `ExamsScreen.tsx`. Details, Risiko und offene Punkte: IDEEN.md B3, `api/examsRest.ts`.
 
-**Noch offen:**
+### Abwesenheiten ohne getTimetableWithAbsences — derselbe Weg, 2026-09-17
+
+Direkt im Anschluss an die Prüfungen-Lösung: da `getTimetableWithAbsences` ebenfalls gesperrt
+ist (Code -8509) und kein Stundenplan-Äquivalent hat, lag nahe, dass die
+"Abwesenheiten"-Seite der Original-App denselben REST-Aufbau hat wie die Prüfungen-Seite. Der
+Nutzer hat selbst nachgesehen und den Endpunkt gefunden:
+
+```
+GET https://htlstp.webuntis.com/WebUntis/api/classreg/absences/students?startDate=20260907&endDate=20270704&studentId=<personId>&excuseStatusId=-1
+
+{"data":{"absences":[{"id":1350715,"startDate":20260911,"endDate":20260911,
+  "startTime":750,"endTime":915,"reasonId":0,"reason":"","text":"",
+  "isExcused":false,"excuseStatus":null,
+  "excuse":{"id":-1,"text":"","excuseDate":0,"excuseStatus":"","isExcused":false,"userId":-1,"username":""}}],
+  "absenceReasons":[],"excuseStatuses":null,"showAbsenceReasonChange":false,"showCreateAbsence":false}}
+```
+
+Der Eintrag mit Status "?" aus dem allerersten Screenshot (weit zu Beginn dieser
+Testreihe) ist damit erklärt: `isExcused: false, excuseStatus: null` — eine noch nicht
+bearbeitete Abwesenheit, kein separater Selbstmelde-Workflow, wie zwischenzeitlich vermutet.
+
+Implementiert in `api/absencesRest.ts`, genutzt von `AbsencesScreen.tsx` (Tab wieder da).
+Details: IDEEN.md B3b.
+
+**Noch offen (gilt für beide REST-Workarounds, Prüfungen und Abwesenheiten):**
 - [ ] Erneuter Login-Test gegen den echten Server: funktioniert `getRest()` (Cookie-Auth,
-      Proxy-Pfad `/WebUntis/api/exams`) dort genauso wie gegen den Mock?
-- [ ] Fehlerverhalten des Endpunkts bei abgelaufener Session ist ungemessen (aktuell nur grober
+      Proxy-Pfade `/WebUntis/api/exams` und `/WebUntis/api/classreg/absences/students`) dort
+      genauso wie gegen den Mock?
+- [ ] Fehlerverhalten der Endpunkte bei abgelaufener Session ist ungemessen (aktuell nur grober
       HTTP-Status, siehe `WebUntisClient.getRest`)
+- [ ] Wie sieht eine bereits *entschuldigte* Abwesenheit in der Antwort aus? Nur eine
+      unbearbeitete wurde bisher gemessen (`excuseStatus: null`)
 - [ ] Test mit einem Lehrer-Konto gegen den echten Server (bisher nur simuliert über `aschmidt` im Mock)
-- [ ] `getTimetableWithAbsences`: sind `externalkey`s an dieser Schule überhaupt gepflegt? (kein Recht zum Prüfen bei diesem Konto)
 - [ ] Liefern Fächer/Klassen echte `foreColor`/`backColor`, oder greift bei dieser Schule durchgehend der generierte Fallback aus `domain/colors.ts`?
 - [ ] Was der ganztägige Eintrag ohne Fach/Raum inhaltlich bedeutet
-- [ ] Abwesenheiten bleiben ungelöst (Tab entfernt, siehe IDEEN.md B3b) — kein äquivalentes Feld/Endpunkt gefunden

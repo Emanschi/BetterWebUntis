@@ -5,6 +5,7 @@ import { ThemeToggle } from './components/ThemeToggle';
 
 const NAV_ITEMS = [
   { to: '/timetable', label: 'Stundenplan' },
+  { to: '/absences', label: 'Abwesenheiten' },
   { to: '/exams', label: 'Prüfungen' },
 ];
 

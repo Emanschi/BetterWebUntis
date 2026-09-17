@@ -1,15 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 import { useSessionStore } from '../../state/sessionStore';
 import { api, restApi } from '../../api/index';
-import { formatWuDate, formatWuTime, toWuDate, wuTimeToMinutes } from '../../api/format';
+import { formatWuDate, formatWuTime, wuTimeToMinutes } from '../../api/format';
 import type { RestExam } from '../../api/examsRest';
-import type { Schoolyear, WuDate } from '../../api/types';
 import { buildExamsIcs } from '../../domain/ics';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { SchoolyearSelect } from '../components/SchoolyearSelect';
 import { Spinner } from '../components/Spinner';
+import { useSchoolyearSelection } from '../hooks/useSchoolyearSelection';
 
 /** Löst eine .ics-Datei als Browser-Download aus — rein clientseitig, kein Server beteiligt. */
 function downloadIcsFile(filename: string, content: string): void {
@@ -24,13 +24,6 @@ function downloadIcsFile(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
-/** Das Schuljahr, das heute enthält — sonst das zuletzt begonnene (z. B. in den Ferien). */
-function defaultSchoolyearId(schoolyears: readonly Schoolyear[], today: WuDate): number | undefined {
-  const containing = schoolyears.find((y) => y.startDate <= today && today <= y.endDate);
-  if (containing !== undefined) return containing.id;
-  return [...schoolyears].toSorted((a, b) => b.startDate - a.startDate)[0]?.id;
-}
-
 /**
  * Prüfungen über einen undokumentierten REST-Endpunkt (`api/examsRest.ts`), nicht über
  * das dokumentierte `getExams`/`getExamTypes` (beide für echte Schüler-Konten gesperrt,
@@ -42,7 +35,8 @@ function defaultSchoolyearId(schoolyears: readonly Schoolyear[], today: WuDate):
  * gemessene Beispielantwort: `api/examsRest.ts`, IDEEN.md B3.
  *
  * Ein Schuljahr auf einmal (nicht "alle Prüfungen aller Jahre"), damit die Antwort auch bei
- * mehreren Schuljahren in der Historie überschaubar bleibt — Auswahl über ein Dropdown.
+ * mehreren Schuljahren in der Historie überschaubar bleibt — Auswahl über ein Dropdown
+ * (`useSchoolyearSelection`, geteilt mit `AbsencesScreen.tsx`).
  *
  * ICS-Export (M8): rein clientseitig, kein Server nötig (anders als der spätere
  * Kalenderabo-Feed aus M11, siehe IDEEN.md B2).
@@ -50,8 +44,6 @@ function defaultSchoolyearId(schoolyears: readonly Schoolyear[], today: WuDate):
 export function ExamsScreen() {
   const client = useSessionStore((s) => s.client);
   const personId = useSessionStore((s) => s.personId);
-
-  const [selectedSchoolyearId, setSelectedSchoolyearId] = useState<number | undefined>(undefined);
 
   const schoolyearsQuery = useQuery({
     queryKey: ['schoolyears'],
@@ -61,11 +53,7 @@ export function ExamsScreen() {
       return api.getSchoolyears(client);
     },
   });
-
-  const today = toWuDate(new Date());
-  const effectiveSchoolyearId =
-    selectedSchoolyearId ?? (schoolyearsQuery.data !== undefined ? defaultSchoolyearId(schoolyearsQuery.data, today) : undefined);
-  const selectedSchoolyear = schoolyearsQuery.data?.find((y) => y.id === effectiveSchoolyearId);
+  const { effectiveId, selected: selectedSchoolyear, setSelectedId } = useSchoolyearSelection(schoolyearsQuery.data);
 
   const examsQuery = useQuery({
     queryKey: ['examsRest', personId, selectedSchoolyear?.id],
@@ -99,22 +87,7 @@ export function ExamsScreen() {
         </div>
         <div className="flex items-center gap-2">
           {schoolyearsQuery.data !== undefined && schoolyearsQuery.data.length > 0 && (
-            <label className="flex items-center gap-2 text-sm text-fg-muted">
-              Schuljahr
-              <select
-                className="rounded-md border border-border bg-bg px-2 py-1 text-sm text-fg"
-                value={effectiveSchoolyearId ?? ''}
-                onChange={(e) => setSelectedSchoolyearId(Number(e.target.value))}
-              >
-                {[...schoolyearsQuery.data]
-                  .toSorted((a, b) => b.startDate - a.startDate)
-                  .map((year) => (
-                    <option key={year.id} value={year.id}>
-                      {year.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
+            <SchoolyearSelect schoolyears={schoolyearsQuery.data} value={effectiveId} onChange={setSelectedId} />
           )}
           {examsQuery.isSuccess && examsQuery.data.length > 0 && (
             <Button variant="secondary" onClick={handleExport}>

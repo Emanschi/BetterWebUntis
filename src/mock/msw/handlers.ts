@@ -11,6 +11,7 @@ import { http, HttpResponse } from 'msw';
 import { SESSION_COOKIE } from '../../api/client';
 import { createMockState, handleRpc, type MockServerState } from '../rpcHandler';
 import { mockExamsRest } from '../examsRestMock';
+import { mockAbsencesRest } from '../absencesRestMock';
 
 function readSessionCookie(cookieHeader: string | null): string | undefined {
   if (cookieHeader === null) return undefined;
@@ -19,6 +20,31 @@ function readSessionCookie(cookieHeader: string | null): string | undefined {
     if (name === SESSION_COOKIE) return rest.join('=');
   }
   return undefined;
+}
+
+/**
+ * Baut einen MSW-GET-Handler für einen der undokumentierten REST-Endpunkte (siehe
+ * api/examsRest.ts, api/absencesRest.ts) — gleiches Muster für beide: `startDate`/
+ * `endDate` filtern, Ergebnis unter `wrapKey` verpackt. 401 bei fehlender Session ist eine
+ * plausible, aber nie real gemessene Annahme.
+ */
+function dateRangeRestHandler<T>(
+  path: string,
+  state: MockServerState,
+  fetchItems: (startDate: number, endDate: number) => readonly T[],
+  wrapKey: string,
+) {
+  return http.get(`*${path}`, ({ request }) => {
+    const sessionId = readSessionCookie(request.headers.get('cookie'));
+    if (sessionId === undefined || !state.sessions.has(sessionId)) {
+      return HttpResponse.json({ error: 'not authenticated (Annahme, real nie gemessen)' }, { status: 401 });
+    }
+
+    const url = new URL(request.url);
+    const startDate = Number(url.searchParams.get('startDate') ?? 0);
+    const endDate = Number(url.searchParams.get('endDate') ?? 99999999);
+    return HttpResponse.json({ data: { [wrapKey]: fetchItems(startDate, endDate) } });
+  });
 }
 
 /**
@@ -52,23 +78,8 @@ export function createMswHandlers(state: MockServerState = createMockState()) {
       return HttpResponse.json(outcome.envelope, { headers });
     }),
 
-    // Undokumentierter REST-Endpunkt (siehe api/examsRest.ts) — kein Teil der 2018er-Doku,
-    // dasselbe 401-bei-fehlender-Session-Verhalten wie in mock/server.ts (Annahme, nie
-    // real gemessen).
-    http.get('*/WebUntis/api/exams', ({ request }) => {
-      const sessionId = readSessionCookie(request.headers.get('cookie'));
-      if (sessionId === undefined || !state.sessions.has(sessionId)) {
-        return HttpResponse.json(
-          { error: 'not authenticated (Annahme, real nie gemessen — siehe examsRest.ts)' },
-          { status: 401 },
-        );
-      }
-
-      const url = new URL(request.url);
-      const startDate = Number(url.searchParams.get('startDate') ?? 0);
-      const endDate = Number(url.searchParams.get('endDate') ?? 99999999);
-      return HttpResponse.json({ data: { exams: mockExamsRest(startDate, endDate) } });
-    }),
+    dateRangeRestHandler('/WebUntis/api/exams', state, mockExamsRest, 'exams'),
+    dateRangeRestHandler('/WebUntis/api/classreg/absences/students', state, mockAbsencesRest, 'absences'),
   ];
 }
 
