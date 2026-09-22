@@ -1,83 +1,107 @@
 # BetterWebUntis
 
-Eine modernere Alternative zur offiziellen WebUntis-App — als Web-App, Android-APK und iOS-App
-aus einer gemeinsamen Codebasis.
+Eine schnellere, moderne Web-Oberfläche für WebUntis — für Schüler-Konten. Echtes
+Zeitraster statt Karten-Liste, frei wählbare Fachfarben, Dark Mode, ICS-Export für
+Prüfungen und ein paar Detailinfos, die die offizielle Oberfläche nicht so übersichtlich
+zeigt.
 
-Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.md) · Teststand: [TESTING.md](TESTING.md)
+> **Kein offizielles WebUntis-/Untis-GmbH-Produkt.** Ein privates Open-Source-Projekt, das
+> gegen die WebUntis-API läuft — Details und Einschränkungen weiter unten.
 
-## Stand
+## Features
 
-| Meilenstein | Status |
-|---|---|
-| M0 Server-Check | ✅ JSON-RPC an der HTL St. Pölten aktiv |
-| M1 Scaffold & Tooling | ✅ |
-| M2 API-Layer | ✅ 99 Tests |
-| M3 Mock-Server & Fixtures | ✅ 135 Tests |
-| M4 App-Shell & Login | ✅ 150 Tests |
-| M5 Stundenplan | ✅ 170 Tests |
-| M6 Elementwechsel | ✅ 178 Tests |
-| M7 Abwesenheiten/Prüfungen/Termine | ✅ 186 Tests |
-| M8 ICS-Export | ✅ 199 Tests |
-| Kalender-Nachbesserung (Zeitraster, Theme-Toggle) | ✅ 207 Tests |
-| M10 Echter Server-Test | ✅ 215 Tests, 2 Bugs gefunden+behoben |
-| Nutzer-Feedback: Scope auf Schüler-Konten, "Termine"/"Profil" entfernt | ✅ 210 Tests |
-| Nutzer-Feedback: Abwesenheiten-Tab entfernt | ✅ 215 Tests |
-| Prüfungen: undokumentierter REST-Endpunkt (getExams/lstype funktionieren real nicht) | ✅ 222 Tests |
-| Abwesenheiten: derselbe Weg, Tab wieder da | ✅ 231 Tests |
-| Elementwechsel: nur noch Klassen (Lehrer/Fach/Raum entfernt) | ✅ 231 Tests |
-| Kalender-Redesign: gefüllte Fach-Karten, Detailansicht, Fachfarben-Einstellungen | ✅ 250 Tests |
-| Nachbesserung: Settings-Fix (-8507), Buchungshinweis, Prüfungs-Sprung, Tages-/Wochenansicht | ✅ 257 Tests |
-| Echtes Lehrstoff-Feld (REST), Rücksprung zu heute über die Navigation | ✅ 259 Tests |
-| Lehrstoff-Fund gegen echten Server repariert (fehlender Bearer-Token, `api/rest/view/v2/**`) | ✅ 268 Tests, real verifiziert |
-| Info-Badge auf der Kalender-Karte für Perioden mit `info` (z. B. "Test"/"MÜ") | ✅ 274 Tests |
-| M9, M11 | offen |
+- **Stundenplan als echtes Zeitraster** — Wochen- oder Tagesansicht, Stunden nach
+  Uhrzeit/Dauer positioniert statt einer losen Liste; Doppelstunden werden automatisch
+  zusammengefasst
+- **Vertretungen, Entfall und Raumänderungen** sofort farblich erkennbar, direkt im Plan
+- **Fach-Karten in Farbe** — von der Schule vorgegeben oder frei wählbar (18 Töne + freie
+  Farbwahl), pro Gerät gespeichert, mit automatisch berechnetem Kontrast für Hell **und**
+  Dunkel
+- **Zusatzinfo-Badge:** ein kleines Icon zeigt direkt auf der Karte, wenn eine Lehrkraft
+  einen Hinweis zur Stunde hinterlegt hat (z. B. "Test"/"MÜ") — Klick zeigt den Volltext
+- **Lehrstoff** je Stunde, wo von der Lehrkraft eingetragen
+- **Anderen Stundenplan ansehen** (z. B. eine andere Klasse)
+- **Abwesenheiten**-Übersicht mit Status (entschuldigt/unentschuldigt), Datum, Dauer
+- **Prüfungen**-Übersicht — ein Klick springt im Stundenplan direkt zur passenden Woche
+  und hebt die Stunde kurz hervor
+- **ICS-Export der Prüfungen** — eine Datei, in jeden Kalender importierbar (Google,
+  Apple, Outlook, …)
+- **Dark/Light Design**, folgt automatisch dem System oder manuell umschaltbar
+- **Keine eigene Nutzerverwaltung:** Login läuft direkt gegen WebUntis, die Sitzung lebt
+  nur im Speicher des Browsers — ein Reload meldet ab, nichts wird auf einem eigenen
+  Server gespeichert oder mitgeloggt
 
-## Befehle
+## Schnellstart
+
+Voraussetzung: [Node.js](https://nodejs.org) 20 oder neuer (bringt `npm` mit).
 
 ```bash
-npm run dev        # Dev-Server mit Proxy auf htlstp.webuntis.com
-npm test           # Unit-Tests gegen die Fixtures aus der API-Doku
+git clone https://github.com/Emanschi/BetterWebUntis.git
+cd BetterWebUntis
+npm install
+```
+
+`.env` aus der Vorlage anlegen und auf die **eigene Schule** einstellen (die Vorlage
+zeigt standardmäßig auf die Testschule des Projekts, HTL St. Pölten):
+
+```bash
+cp .env.example .env
+```
+
+```dotenv
+VITE_WEBUNTIS_SERVER=https://<eure-schule>.webuntis.com
+VITE_WEBUNTIS_SCHOOL=<schulname-wie-im-webuntis-login>
+```
+
+Dann starten:
+
+```bash
+npm run dev
+```
+
+Öffnet auf `http://localhost:5173` — dort mit dem eigenen WebUntis-Konto anmelden.
+Zugangsdaten verlassen dabei nie den eigenen Rechner: die Web-Version läuft komplett im
+Browser, `vite` übernimmt im Hintergrund nur die Proxy-Weiterleitung an WebUntis (nötig,
+weil WebUntis Browsern keine direkten Cross-Origin-Logins erlaubt).
+
+**Ohne eigenes WebUntis-Konto zum Ausprobieren:** ein eingebauter Mock-Server simuliert
+eine Fake-Schule mit Testdaten.
+
+```bash
+npm run mock          # eigenes Terminal, läuft auf Port 4001
+VITE_WEBUNTIS_SERVER=http://localhost:4001 npm run dev   # zweites Terminal
+```
+
+Login dann mit `mmuster` / `test1234` (Schüler) oder `aschmidt` / `test1234` (Lehrkraft).
+
+## Bekannte Einschränkungen
+
+- Aktuell ausschließlich für **Schüler-Konten** gebaut und getestet.
+- Ein Teil der Funktionen (Prüfungen, Abwesenheiten, Lehrstoff/Zusatzinfo) nutzt
+  Endpunkte, die aus der originalen WebUntis-Oberfläche abgeschaut wurden, nicht aus
+  einer offiziellen Dokumentation — sie können sich jederzeit ohne Vorwarnung ändern und
+  wurden bisher nur gegen eine einzelne Schule gemessen. Funktioniert eure Schule anders,
+  bitte als Issue melden.
+- Mitteilungen sowie Passwort/Kontaktdaten ändern: von der WebUntis-API nicht abgedeckt,
+  deshalb nicht Teil der App.
+- Android/iOS (über [Capacitor](https://capacitorjs.com)) sind architektonisch
+  vorbereitet, aber noch nicht gebaut — bisher reine Web-App.
+
+## Entwicklung
+
+```bash
+npm test           # Unit-Tests (Vitest)
 npm run typecheck  # TypeScript im strict-Modus
 npm run build      # Produktions-Build
-npm run smoke      # Rauchtest gegen den echten Server (braucht Zugangsdaten)
-npm run mock        # Mock-Server auf localhost:4001 zum manuellen Testen ohne echten Server
 ```
 
-Der Rauchtest liest die Zugangsdaten aus der Umgebung, nie aus einer Datei:
+Der komplette Entwicklungsstand, alle Architekturentscheidungen und Messungen gegen den
+echten Server stehen in drei laufend gepflegten Dokumenten:
 
-```bash
-WEBUNTIS_USER='...' WEBUNTIS_PASSWORD='...' npm run smoke
-```
+- [PLAN.md](PLAN.md) — Architektur, Meilensteine, Risiken
+- [IDEEN.md](IDEEN.md) — offene Fragen, Entscheidungen, Backlog
+- [TESTING.md](TESTING.md) — was gegen echte Daten verifiziert ist, was noch aussteht
 
-Er prüft `authenticate` → `getTimetable` → `logout` und listet auf, welche Methoden
-das Konto überhaupt aufrufen darf. Ergebnisse gehören nach `TESTING.md`.
+## Lizenz
 
-## Wo was liegt
-
-```
-src/api/        JSON-RPC-Layer — Typen, Transport, Client, Methoden (nur dokumentierte!)
-                Ausnahme: examsRest.ts/absencesRest.ts/calendarEntryRest.ts (undokumentierte
-                REST-Endpunkte, eigener Namensraum "restApi", ausdrücklich freigegeben —
-                siehe IDEEN.md B3/B8)
-src/domain/     Fachlogik: Wochenraster, Doppelstunden-Merge, Fachfarben, ICS (M8)
-src/ui/         Komponenten, Screens, Routing, AppShell
-src/state/      Zustand-Stores (Theme, Session) — kein Netzzugriff, nur über src/api
-src/mock/       Mock-Server und Fake-Daten — Fake-Schule "Mock-HTL"
-scripts/        Rauchtest gegen den echten Server
-```
-
-Regel: `ui/` und `domain/` sprechen nie direkt mit dem Netz, nur über `src/api`.
-
-**Build-Output liegt außerhalb des Projektordners:** `/home/emanschi/builds/BetterWebuntis/`.
-Das Projekt selbst liegt bewusst nicht in OneDrive.
-
-## Zwei Dinge, die man wissen muss
-
-**Die Web-Version braucht einen Proxy.** WebUntis sendet kein
-`Access-Control-Allow-Credentials`, und `JSESSIONID` ist `HttpOnly` — der Browser kann die
-API also nicht direkt ansprechen. Im Dev übernimmt das der Vite-Proxy. Android und iOS sind
-nicht betroffen, weil Capacitor nativ requestet. Messung in [TESTING.md](TESTING.md).
-
-**Die API kann weniger, als die Original-App zeigt.** Mitteilungen, Passwort ändern und
-Kontaktdaten ändern haben in der JSON-RPC-Doku von 2018 keine Entsprechung. Was fehlt und
-welche Optionen es gibt, steht in [IDEEN.md](IDEEN.md).
+[GPL-3.0](LICENSE).

@@ -140,8 +140,12 @@ der API-Doku; Fake-Daten halten sich an dieselben Formatregeln und werden von
   oder vermutet ist, samt Datum. Diesen Stil beibehalten.
 - **Kein toter Code.** Entfernter Scope wird gelöscht, nicht auskommentiert (B4/B5) — `git log`
   ist das Archiv.
-- **Nach jeder Runde:** Tests + typecheck grün, dann PLAN.md/IDEEN.md/TESTING.md und die
-  Status-Tabelle in README.md fortschreiben.
+- **Nach jeder Runde:** Tests + typecheck grün, dann PLAN.md/IDEEN.md/TESTING.md
+  fortschreiben. **Seit 2026-09-22 bewusst NICHT mehr README.md:** README.md ist jetzt das
+  öffentliche Aushängeschild (Features, Schnellstart) für Leute, die übers GitHub-Repo
+  reinschauen — der laufende Entwicklungsstand/die Milestone-Historie gehört ausschließlich
+  in PLAN.md/IDEEN.md/TESTING.md. README.md nur anfassen, wenn sich ein öffentlich
+  sichtbares Feature oder der Installationsweg selbst ändert, nicht bei jeder Runde.
 - **Git:** `origin` = `github.com/Emanschi/BetterWebUntis`, lokaler Branch `main`. **Push und
   Commit nur nach ausdrücklicher Erlaubnis je Runde, nie automatisch.**
 - **Zugangsdaten erreichen nie eine Agenten-Session.** Smoke-Tests gegen den echten Server führt
