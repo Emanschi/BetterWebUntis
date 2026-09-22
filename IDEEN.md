@@ -189,6 +189,100 @@ Ein eigener Endpunkt für die Detailansicht EINES aufgeklappten Stundenplan-Eint
 - Drei Wochen vorblättern, dann auf "Stundenplan" in der Navigation klicken: springt zur aktuellen Woche zurück
 - Dasselbe in der Tagesansicht: vier Tage vorblättern, "Stundenplan" klicken → zurück zum heutigen Tag, Tagesansicht bleibt aktiv (kein Zurückfallen auf Wochenansicht)
 
+**Fortsetzung 2026-09-22 — Notizen/Hausaufgaben (`notesAll`/`notesStaff`/`homeworks`): Bearer-Token-Hypothese bestätigt und eingebaut.**
+Nutzerwunsch war, dieselben "Zusatzinformationen" auch für die noch nicht übernommenen Felder
+aus derselben gemessenen Antwort zu zeigen (siehe oben: "Das reale Objekt enthält zusätzlich …
+`notesAll`/`notesStaff` … `homeworks`"). Dabei zeigte sich zuerst ein Rückschlag: alle 34
+Perioden der laufenden Woche lieferten HTTP 404 — nicht nur "kein Treffer" (das wäre HTTP 200
+mit leerem `calendarEntries`), sondern der Endpunkt insgesamt, für jede Periode gleich. Eine
+echte Abweichung vom bisher gemessenen Verhalten (2026-09-17 funktionierte derselbe Endpunkt
+für dieselbe Art Anfrage noch).
+
+**Ursache gefunden und bestätigt (Rohdaten: TESTING.md):** die neuere `api/rest/**`-Fläche von
+WebUntis (auf die auch `calendar-entry/detail` fällt, erkennbar am `/view/v2/`-Pfadsegment)
+braucht einen separaten Bearer-Token, den `GET /WebUntis/api/token/new` mit der bestehenden
+`JSESSIONID`-Session liefert (rohes JWT, kein JSON) — anders als die älteren REST-Endpunkte aus
+B3/B3b (`api/exams`, `api/classreg/absences/students`), die mit dem Cookie allein auskommen.
+Ohne den Token: HTTP 404 mit `{"errorCode":"NOT_FOUND",…}` — sieht wie "Route existiert nicht"
+aus, ist aber "kein gültiger Token". Mit `Authorization: Bearer <token>`: HTTP 200, echte Daten.
+Das war zunächst nur aus öffentlich bekannten WebUntis-Reverse-Engineering-Projekten
+übernommenes Hintergrundwissen (keine Messung an dieser Schule) — jetzt für `htlstp.webuntis.com`
+selbst bestätigt.
+
+**Umgesetzt:**
+- `WebUntisClient.getRestRaw()` (`api/client.ts`) — roh: kein `JSON.parse`, wirft nicht bei
+  Fehlerstatus, erlaubt zusätzliche Header. Blieb als generelles Diagnose-Werkzeug für künftige
+  unklare Endpunkte erhalten (nutzt es z. B. `scripts/smoke-test.ts` weiterhin für `getExams`-
+  artige Erkundungen). 3 Tests.
+- `WebUntisClient.getRestBearer()` (`api/client.ts`) — die eigentliche Lösung: holt den Token
+  selbst über `getRestRaw()`, cached ihn pro Client-Instanz (Single-Flight gegen parallele
+  Erstanfragen), holt ihn bei HTTP 401/403 einmal neu und wiederholt den Aufruf, verwirft ihn
+  bei jedem Sessionwechsel (`setSession()`/`clearSession()`). Teilt sich Warteschlange/
+  Drosselung mit `call()`/`getRest()`. 6 Tests, inkl. Retry- und Cache-Verhalten.
+- `api/calendarEntryRest.ts` nutzt jetzt `getRestBearer()` statt `getRest()` — der
+  "Lehrstoff"-Fund aus B8 war dadurch bisher gegen den echten Server faktisch tot (jeder
+  Aufruf schlug fehl), funktioniert jetzt tatsächlich.
+- Mocks (`mock/calendarEntryRestMock.ts`, `mock/msw/handlers.ts`, `mock/server.ts`) simulieren
+  `/api/token/new` und prüfen den `Authorization`-Header auf `calendar-entry/detail` genauso
+  streng wie der echte Server — ein versehentlicher Rückfall auf `getRest()` würde sofort im
+  Test aussehen wie beim echten Server (404), statt einfach durchzulaufen.
+
+**Bewusst nicht getan:** nicht geprüft, ob `examsRest.ts`/`absencesRest.ts` (B3/B3b) *auch*
+einen Bearer-Token bräuchten — die liefen laut B3/B3b bisher nur einmal über eine DevTools-Kopie
+des Nutzers, nie über unseren eigenen `getRest()`-Code gegen den echten Server (offener Punkt
+in TESTING.md). Ihr Pfad (`api/exams`, `api/classreg/…`) hat kein `/rest/view/v2/`-Segment, ist
+also vermutlich die ältere, Cookie-only-Fläche — aber "vermutlich" ist keine Messung.
+
+**Dritter Lauf, ganze Woche, mit funktionierendem Bearer-Token — `teachingContent` verifiziert,
+Notizen weiterhin leer (2026-09-22):** 9 von 34 Perioden hatten echten `teachingContent`, quer
+durch verschiedene Fächer (Details: TESTING.md). Der "Lehrstoff"-Fund aus B8 ist damit zum
+ersten Mal wirklich mit echten Serverdaten bestätigt, nicht nur mit einem einzelnen
+DevTools-Beispiel. `notesAll`/`notesStaff`/`homeworks` blieben dagegen bei **0 von 34** —
+auch bei genau den 9 Perioden mit `teachingContent`. Eine echte Stichprobe über eine ganze
+Woche spricht eher dafür, dass diese drei Felder an dieser Schule ungenutzt sind, als dass es
+noch an der Technik liegt — aber das ist eine Vermutung, keine Messung; ebenso denkbar, dass
+"Notizen" in der echten Oberfläche etwas anderes meint, das wir noch nicht identifiziert haben.
+
+**Entscheidung des Nutzers (2026-09-22): abgeschlossen, `notesAll`/`notesStaff`/`homeworks`
+bewusst NICHT übernommen.** Begründung des Nutzers: diese Felder werden real selten befüllt,
+sind dadurch kaum sinnvoll zu testen. Wichtig sind stattdessen zwei Dinge, die beide bereits
+funktionieren:
+1. **`teachingContent`** ("Lehrstoff") — siehe oben, über eine ganze Woche verifiziert.
+2. **Das dokumentierte `Period.info`-Feld** ("Zusatzinfo" in `PeriodDetail.tsx`) — genau dort
+   tragen Lehrkräfte an dieser Schule offenbar kurze Hinweise wie "Test" oder "MÜ" ein (echtes
+   Beispiel schon gemessen: `info: "SMÜ Nomenklatur"` bei der NW2-Prüfung, siehe TESTING.md
+   Abschnitt 3, "Prüfungen ohne getExams"). Das ist **kein undokumentierter REST-Kram**,
+   sondern ganz normal Teil von `getTimetable` (Doku Abschnitt 15, `showInfo: true`) und war
+   schon vor B8 da.
+
+**Konsequenz:** `RestCalendarEntryDetail` (`api/calendarEntryRest.ts`) bleibt bei `id` +
+`teachingContent` — `notesAll`/`notesStaff`/`homeworks` werden nicht in den Typ übernommen
+(Projektregel: keine vermutlich leeren Felder in die UI bauen).
+
+**Direkter Anschluss, 2026-09-22 — Info-Badge auf der Kalender-Karte.** Nutzerwunsch: wenn eine
+Periode ein `info` hat (das dokumentierte Feld, das "Test"/"MÜ"-Hinweise trägt, siehe oben), soll
+ein Icon direkt auf der Karte sichtbar sein — nicht nur im Hover-Tooltip (der auf Touch-Geräten
+ohnehin unerreichbar ist) und nicht erst nach dem Öffnen. Klick/Aufklappen zeigt weiterhin den
+vollen Text (bereits vorhanden: "Zusatzinfo" in `PeriodDetail.tsx`).
+
+Umgesetzt in `ui/components/TimetableBlockCard.tsx`: ein kleiner Kreis-Badge ("i") oben rechts
+neben dem lstype-Badge, sichtbar, sobald `block.info` nicht leer ist — mit `role="img"
+aria-label="Zusatzinfo vorhanden"` (nicht `aria-hidden`, damit Screenreader-Nutzer dieselbe
+Information bekommen wie sehende Nutzer, nicht nur über den unzuverlässigen `title`-Hover). Kein
+eigener Klick-Handler nötig, die ganze Karte öffnet ohnehin schon die Detailansicht. 6 neue Tests
+(`ui/components/__tests__/TimetableBlockCard.test.tsx`, bisher gab es für diese Komponente noch
+keine eigene Testdatei).
+
+**Manuell verifiziert** (Mock-Server, `mmuster`, Light **und** Dark Mode, über die
+Accessibility-Tree-Ausgabe des Browsers gegengeprüft, nicht nur per Screenshot): genau die drei
+Perioden mit `info` (Mittwoch Entfall, Montag Vertretung, Freitag Raumänderung) zeigen den
+Badge, alle anderen nicht; Badge und ⚠-Pille (Vertretung/Raumänderung) stehen nebeneinander ohne
+sich zu überlappen; Klick auf die Raumänderungs-Karte öffnet die Detailansicht mit "ZUSATZINFO:
+K201 wegen Sanierung gesperrt".
+
+Dieser Reverse-Engineering-Strang (B8, "Zusatzinformationen beim Öffnen einer Stunde") ist damit
+fertig.
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.

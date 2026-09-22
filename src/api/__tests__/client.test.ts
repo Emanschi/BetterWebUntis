@@ -318,6 +318,115 @@ describe('getRest — undokumentierte REST-Endpunkte (siehe examsRest.ts)', () =
   });
 });
 
+describe('getRestRaw — Diagnose fuer noch unklare Endpunkte (siehe scripts/smoke-test.ts)', () => {
+  it('wirft NICHT bei einem Nicht-2xx-Status, sondern gibt Status+Body zurueck', async () => {
+    const { client, transport } = makeClient();
+    transport.queue({ status: 404, body: '<html>not found</html>' });
+
+    await expect(client.getRestRaw('/api/rest/view/v2/calendar-entry/detail', {})).resolves.toEqual({
+      status: 404,
+      body: '<html>not found</html>',
+    });
+  });
+
+  it('parst die Antwort NICHT als JSON — auch ein roher Nicht-JSON-Body kommt unveraendert an', async () => {
+    const { client, transport } = makeClient();
+    transport.queue({ status: 200, body: 'eyJhbGciOiJIUzI1NiJ9.not-real-json' });
+
+    await expect(client.getRestRaw('/api/token/new', {})).resolves.toEqual({
+      status: 200,
+      body: 'eyJhbGciOiJIUzI1NiJ9.not-real-json',
+    });
+  });
+
+  it('setzt zusaetzliche Header (z. B. Authorization) neben dem Cookie', async () => {
+    const { client, transport } = makeClient();
+    client.setSession({ sessionId: 'ABC123', personType: 5, personId: 42 });
+    transport.queue({ status: 200, body: '{}' });
+
+    await client.getRestRaw('/api/rest/view/v2/calendar-entry/detail', {}, { Authorization: 'Bearer xyz' });
+
+    const headers = transport.getRequests[0]?.headers;
+    expect(headers?.['Authorization']).toBe('Bearer xyz');
+    expect(headers?.['Cookie']).toContain('JSESSIONID=ABC123');
+  });
+});
+
+describe('getRestBearer — neuere "api/rest/**"-Flaeche mit separatem Bearer-Token (siehe IDEEN.md B8)', () => {
+  it('holt zuerst einen Token ueber /api/token/new und schickt ihn als Authorization mit', async () => {
+    const { client, transport } = makeClient();
+    transport.queue({ status: 200, body: 'raw.jwt.token' }); // /api/token/new
+    transport.queue({ status: 200, body: '{"calendarEntries":[]}' }); // eigentlicher Aufruf
+
+    await client.getRestBearer('/api/rest/view/v2/calendar-entry/detail', { elementId: 1 });
+
+    expect(transport.getRequests).toHaveLength(2);
+    expect(transport.getRequests[0]?.url).toContain('/api/token/new');
+    expect(transport.getRequests[1]?.url).toContain('/api/rest/view/v2/calendar-entry/detail');
+    expect(transport.getRequests[1]?.headers['Authorization']).toBe('Bearer raw.jwt.token');
+  });
+
+  it('entfernt umschliessende Anfuehrungszeichen, falls der Token als JSON-String kommt', async () => {
+    const { client, transport } = makeClient();
+    transport.queue({ status: 200, body: '"quoted.jwt.token"' });
+    transport.queue({ status: 200, body: '{}' });
+
+    await client.getRestBearer('/api/x', {});
+
+    expect(transport.getRequests[1]?.headers['Authorization']).toBe('Bearer quoted.jwt.token');
+  });
+
+  it('cached den Token — ein zweiter Aufruf holt KEINEN neuen Token', async () => {
+    const { client, transport } = makeClient();
+    transport.queue({ status: 200, body: 'tok1' });
+    transport.queue({ status: 200, body: '{}' });
+    transport.queue({ status: 200, body: '{}' });
+
+    await client.getRestBearer('/api/x', {});
+    await client.getRestBearer('/api/x', {});
+
+    const tokenRequests = transport.getRequests.filter((r) => r.url.includes('/api/token/new'));
+    expect(tokenRequests).toHaveLength(1);
+  });
+
+  it('holt bei HTTP 401 einmal einen neuen Token und wiederholt den Aufruf', async () => {
+    const { client, transport } = makeClient();
+    transport.queue({ status: 200, body: 'tok-alt' }); // erster Token
+    transport.queue({ status: 401, body: '' }); // erster Versuch schlaegt fehl (abgelaufen)
+    transport.queue({ status: 200, body: 'tok-neu' }); // neuer Token
+    transport.queue({ status: 200, body: '{"ok":true}' }); // Wiederholung klappt
+
+    await expect(client.getRestBearer('/api/x', {})).resolves.toEqual({ ok: true });
+    expect(transport.getRequests[3]?.headers['Authorization']).toBe('Bearer tok-neu');
+  });
+
+  it('gibt nach EINEM erfolglosen Retry auf, statt endlos zu versuchen', async () => {
+    const { client, transport } = makeClient();
+    transport.queue({ status: 200, body: 'tok-alt' });
+    transport.queue({ status: 401, body: '' });
+    transport.queue({ status: 200, body: 'tok-neu' });
+    transport.queue({ status: 401, body: '' });
+
+    await expect(client.getRestBearer('/api/x', {})).rejects.toBeInstanceOf(WebUntisTransportError);
+  });
+
+  it('verwirft den gecachten Token bei setSession() — naechster Aufruf holt neu', async () => {
+    const { client, transport } = makeClient();
+    transport.queue({ status: 200, body: 'tok1' });
+    transport.queue({ status: 200, body: '{}' });
+    await client.getRestBearer('/api/x', {});
+
+    client.setSession({ sessionId: 'NEU', personType: 5, personId: 1 });
+
+    transport.queue({ status: 200, body: 'tok2' });
+    transport.queue({ status: 200, body: '{}' });
+    await client.getRestBearer('/api/x', {});
+
+    const tokenRequests = transport.getRequests.filter((r) => r.url.includes('/api/token/new'));
+    expect(tokenRequests).toHaveLength(2);
+  });
+});
+
 describe('Hilfsfunktionen', () => {
   it('baut die direkte Endpunkt-URL', () => {
     expect(directEndpoint('htlstp.webuntis.com')).toBe('https://htlstp.webuntis.com/WebUntis/jsonrpc.do');

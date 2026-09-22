@@ -12,7 +12,7 @@ import { SESSION_COOKIE } from '../../api/client';
 import { createMockState, handleRpc, type MockServerState } from '../rpcHandler';
 import { mockExamsRest } from '../examsRestMock';
 import { mockAbsencesRest } from '../absencesRestMock';
-import { mockCalendarEntryDetail, parseIsoLocalDateTime } from '../calendarEntryRestMock';
+import { MOCK_BEARER_AUTH_HEADER, MOCK_BEARER_TOKEN, mockCalendarEntryDetail, parseIsoLocalDateTime } from '../calendarEntryRestMock';
 import type { MockElement } from '../timetable';
 
 function readSessionCookie(cookieHeader: string | null): string | undefined {
@@ -50,6 +50,20 @@ function dateRangeRestHandler<T>(
 }
 
 /**
+ * Simuliert `/api/token/new` (siehe `WebUntisClient.getRestBearer()`, gemessen 2026-09-22,
+ * IDEEN.md B8 Fortsetzung) — liefert wie real einen rohen Text-Body, kein JSON.
+ */
+function tokenNewHandler(state: MockServerState) {
+  return http.get('*/WebUntis/api/token/new', ({ request }) => {
+    const sessionId = readSessionCookie(request.headers.get('cookie'));
+    if (sessionId === undefined || !state.sessions.has(sessionId)) {
+      return HttpResponse.json({ error: 'not authenticated (Annahme, real nie gemessen)' }, { status: 401 });
+    }
+    return HttpResponse.text(MOCK_BEARER_TOKEN);
+  });
+}
+
+/**
  * Simuliert den undokumentierten calendar-entry-detail-Endpunkt (siehe
  * api/calendarEntryRest.ts) — anderes Anfrage-/Antwortformat als `dateRangeRestHandler`
  * (ein einzelner Eintrag über exakte Start-/Endzeit statt einer Liste über einen Zeitraum).
@@ -59,6 +73,17 @@ function calendarEntryDetailHandler(state: MockServerState) {
     const sessionId = readSessionCookie(request.headers.get('cookie'));
     if (sessionId === undefined || !state.sessions.has(sessionId)) {
       return HttpResponse.json({ error: 'not authenticated (Annahme, real nie gemessen)' }, { status: 401 });
+    }
+
+    // Gemessen 2026-09-22 (siehe IDEEN.md B8 Fortsetzung, WebUntisClient.getRestBearer()):
+    // dieser Endpunkt-Zweig braucht zusaetzlich einen Bearer-Token, sonst HTTP 404 mit
+    // genau dieser Fehlerform — simuliert, damit ein Test sofort auffaellt, falls eine
+    // Aufrufstelle faelschlich getRest() statt getRestBearer() benutzt.
+    if (request.headers.get('authorization') !== MOCK_BEARER_AUTH_HEADER) {
+      return HttpResponse.json(
+        { errorCode: 'NOT_FOUND', requestId: 'mock', traceId: 'mock', errorMessage: 'Not Found' },
+        { status: 404 },
+      );
     }
 
     const url = new URL(request.url);
@@ -105,6 +130,7 @@ export function createMswHandlers(state: MockServerState = createMockState()) {
 
     dateRangeRestHandler('/WebUntis/api/exams', state, mockExamsRest, 'exams'),
     dateRangeRestHandler('/WebUntis/api/classreg/absences/students', state, mockAbsencesRest, 'absences'),
+    tokenNewHandler(state),
     calendarEntryDetailHandler(state),
   ];
 }

@@ -28,6 +28,8 @@ Planung und Architektur: [PLAN.md](PLAN.md) · Offene Fragen: [IDEEN.md](IDEEN.m
 | Kalender-Redesign: gefüllte Fach-Karten, Detailansicht, Fachfarben-Einstellungen | ✅ 250 Tests |
 | Nachbesserung: Settings-Fix (-8507), Buchungshinweis, Prüfungs-Sprung, Tages-/Wochenansicht | ✅ 257 Tests |
 | Echtes Lehrstoff-Feld (REST), Rücksprung zu heute über die Navigation | ✅ 259 Tests |
+| Lehrstoff-Fund gegen echten Server repariert (fehlender Bearer-Token, `api/rest/view/v2/**`) | ✅ 268 Tests, real verifiziert |
+| Info-Badge auf der Kalender-Karte für Perioden mit `info` (z. B. "Test"/"MÜ") | ✅ 274 Tests |
 | M9, M11 | offen |
 
 ## Befehle

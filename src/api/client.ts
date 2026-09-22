@@ -55,6 +55,14 @@ export class WebUntisClient {
   #requestCounter = 0;
   #queue: Promise<unknown> = Promise.resolve();
   #lastRequestAt = 0;
+  /**
+   * Bearer-Token für die neuere "api/rest/**"-Fläche (z. B. calendar-entry/detail) — anders
+   * als die älteren REST-Endpunkte (api/exams, api/classreg/…) reicht dort das JSESSIONID-
+   * Cookie allein nicht, siehe `getRestBearer()`. Gemessen 2026-09-22, siehe IDEEN.md B8.
+   */
+  #bearerToken: string | undefined;
+  /** Verhindert parallele Mehrfach-Anfragen an /api/token/new, wenn kein Token gecacht ist. */
+  #bearerTokenPromise: Promise<string> | undefined;
 
   constructor(options: WebUntisClientOptions) {
     this.endpoint = options.endpoint;
@@ -87,12 +95,19 @@ export class WebUntisClient {
     } else {
       this.#cookies.set(SESSION_COOKIE, session.sessionId);
     }
+    // Ein Bearer-Token aus /api/token/new (siehe getRestBearer()) haengt an der JSESSIONID,
+    // die er geholt hat -- bei jedem Sessionwechsel (Login, Logout, Wiederherstellung) ist
+    // ein alter Token wertlos bzw. gehoert zur falschen Session.
+    this.#bearerToken = undefined;
+    this.#bearerTokenPromise = undefined;
   }
 
   /** Verwirft Session und Cookies. Ruft **nicht** `logout` auf — das macht `methods.logout`. */
   clearSession(): void {
     this.#session = null;
     this.#cookies.clear();
+    this.#bearerToken = undefined;
+    this.#bearerTokenPromise = undefined;
   }
 
   /** URL inklusive `?school=` (Doku Abschnitt 1: Pflichtparameter). */
@@ -117,6 +132,45 @@ export class WebUntisClient {
    */
   async getRest<TResult>(path: string, query: Record<string, string | number | boolean>): Promise<TResult> {
     return this.#enqueue(() => this.#executeRest<TResult>(path, query));
+  }
+
+  /**
+   * Wie `getRest()`, aber für die neuere "api/rest/**"-Fläche von WebUntis (z. B.
+   * "/api/rest/view/v2/calendar-entry/detail"), die — anders als die älteren REST-Endpunkte
+   * unter `getRest()` (`api/exams`, `api/classreg/absences/students`, siehe IDEEN.md B3/B3b)
+   * — nicht mit dem JSESSIONID-Cookie allein auskommt.
+   *
+   * Gemessen 2026-09-22 (siehe IDEEN.md B8, `api/calendarEntryRest.ts`): ohne
+   * `Authorization`-Header antwortet der Server mit HTTP 404 (**nicht** 401/403) — sieht wie
+   * "Route existiert nicht" aus, ist aber "kein gültiger Token". `GET /api/token/new` liefert
+   * mit der bestehenden Session ein rohes JWT (kein JSON-Body, kein umschließendes
+   * Anführungszeichen), das als `Authorization: Bearer <token>` mitgeschickt werden muss.
+   *
+   * Der Token wird einmal pro Client-Instanz geholt und für weitere Aufrufe wiederverwendet
+   * (verworfen bei jedem Sessionwechsel, siehe `setSession()`/`clearSession()`). Schlägt ein
+   * Aufruf mit HTTP 401/403 fehl, wird der Token einmal neu geholt und der Aufruf wiederholt
+   * — wie lange ein Token gültig ist, ist ungemessen. Teilt sich Warteschlange/Drosselung mit
+   * `call()`/`getRest()`.
+   */
+  async getRestBearer<TResult>(path: string, query: Record<string, string | number | boolean>): Promise<TResult> {
+    return this.#enqueue(() => this.#executeRestBearer<TResult>(path, query, false));
+  }
+
+  /**
+   * Wie `getRest()`, aber ohne `JSON.parse` und mit der Möglichkeit, zusätzliche Header zu
+   * setzen (z. B. `Authorization`) — für die Erkundung eines noch unklaren Endpunkts, bei
+   * dem weder Antwortformat noch Auth-Mechanismus feststehen (z. B. ein roher Bearer-Token
+   * statt JSON). Wirft NICHT bei einem Nicht-2xx-Status — die Aufruferin sieht Status und
+   * Rohtext immer, auch bei einem Fehler, und entscheidet selbst. Nur für Diagnose/Skripte
+   * gedacht (siehe scripts/smoke-test.ts); Produktionscode nutzt `getRest()`, sobald das
+   * Format geklärt ist.
+   */
+  async getRestRaw(
+    path: string,
+    query: Record<string, string | number | boolean>,
+    extraHeaders: Record<string, string> = {},
+  ): Promise<{ status: number; body: string }> {
+    return this.#enqueue(() => this.#executeRestRaw(path, query, extraHeaders));
   }
 
   #enqueue<TResult>(task: () => Promise<TResult>): Promise<TResult> {
@@ -202,13 +256,98 @@ export class WebUntisClient {
   }
 
   async #executeRest<TResult>(path: string, query: Record<string, string | number | boolean>): Promise<TResult> {
+    const { status, body } = await this.#executeRestRaw(path, query, {});
+
+    if (status < 200 || status >= 300) {
+      throw new WebUntisTransportError(`HTTP ${status} beim Aufruf von "${path}".`, path, { status, body });
+    }
+
+    try {
+      return JSON.parse(body) as TResult;
+    } catch (cause) {
+      throw new WebUntisTransportError(`Antwort auf "${path}" ist kein gueltiges JSON.`, path, {
+        status,
+        body,
+        cause,
+      });
+    }
+  }
+
+  async #executeRestBearer<TResult>(
+    path: string,
+    query: Record<string, string | number | boolean>,
+    isRetryAfterAuthFailure: boolean,
+  ): Promise<TResult> {
+    const token = await this.#ensureBearerToken();
+    const { status, body } = await this.#executeRestRaw(path, query, { Authorization: `Bearer ${token}` });
+
+    // Ungemessen, wie lange ein Token gilt (siehe getRestBearer()-Doku) -- bei 401/403 einmal
+    // neu holen und wiederholen, statt sofort aufzugeben. Kein Endlosversuch: nur EIN Retry.
+    if ((status === 401 || status === 403) && !isRetryAfterAuthFailure) {
+      this.#bearerToken = undefined;
+      return this.#executeRestBearer<TResult>(path, query, true);
+    }
+
+    if (status < 200 || status >= 300) {
+      throw new WebUntisTransportError(`HTTP ${status} beim Aufruf von "${path}".`, path, { status, body });
+    }
+    try {
+      return JSON.parse(body) as TResult;
+    } catch (cause) {
+      throw new WebUntisTransportError(`Antwort auf "${path}" ist kein gueltiges JSON.`, path, {
+        status,
+        body,
+        cause,
+      });
+    }
+  }
+
+  /**
+   * Liefert den gecachten Bearer-Token oder holt einen neuen — mit Single-Flight-Schutz
+   * (`#bearerTokenPromise`), damit nicht zwei gleichzeitige Aufrufe ohne Cache zwei Token
+   * anfordern. Ruft `#executeRestRaw` bewusst DIREKT auf, nicht über `#enqueue()`: diese
+   * Methode läuft immer bereits INNERHALB eines über `#enqueue` laufenden Tasks
+   * (`#executeRestBearer`) — ein verschachtelter `#enqueue`-Aufruf würde sich selbst
+   * blockieren, weil die Warteschlange erst weiterläuft, wenn der äußere Task fertig ist.
+   */
+  async #ensureBearerToken(): Promise<string> {
+    if (this.#bearerToken !== undefined) return this.#bearerToken;
+    if (this.#bearerTokenPromise === undefined) {
+      this.#bearerTokenPromise = this.#fetchBearerToken().finally(() => {
+        this.#bearerTokenPromise = undefined;
+      });
+    }
+    return this.#bearerTokenPromise;
+  }
+
+  async #fetchBearerToken(): Promise<string> {
+    const { status, body } = await this.#executeRestRaw('/api/token/new', {}, {});
+    if (status < 200 || status >= 300) {
+      throw new WebUntisTransportError(`HTTP ${status} beim Holen des Bearer-Tokens.`, '/api/token/new', {
+        status,
+        body,
+      });
+    }
+    // Gemessen 2026-09-22: die Antwort ist ein roher JWT-String, kein JSON — trotzdem
+    // vorsichtshalber umschließende Anführungszeichen entfernen, falls ein anderer Server
+    // ihn doch als JSON-String liefert.
+    const token = body.trim().replace(/^"|"$/g, '');
+    this.#bearerToken = token;
+    return token;
+  }
+
+  async #executeRestRaw(
+    path: string,
+    query: Record<string, string | number | boolean>,
+    extraHeaders: Record<string, string>,
+  ): Promise<{ status: number; body: string }> {
     await this.#respectRateLimit();
 
     const qs = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) qs.set(key, String(value));
     const url = `${this.#restBase()}${path}?${qs.toString()}`;
 
-    const headers: Record<string, string> = { Accept: 'application/json' };
+    const headers: Record<string, string> = { Accept: 'application/json', ...extraHeaders };
     if (this.#transport.canSetCookieHeader) {
       const cookieHeader = this.#cookieHeader();
       if (cookieHeader !== undefined) headers['Cookie'] = cookieHeader;
@@ -224,23 +363,7 @@ export class WebUntisClient {
     }
 
     this.#absorbCookies(response.setCookie);
-
-    if (response.status < 200 || response.status >= 300) {
-      throw new WebUntisTransportError(`HTTP ${response.status} beim Aufruf von "${path}".`, path, {
-        status: response.status,
-        body: response.body,
-      });
-    }
-
-    try {
-      return JSON.parse(response.body) as TResult;
-    } catch (cause) {
-      throw new WebUntisTransportError(`Antwort auf "${path}" ist kein gueltiges JSON.`, path, {
-        status: response.status,
-        body: response.body,
-        cause,
-      });
-    }
+    return { status: response.status, body: response.body };
   }
 
   /** Basis-URL ohne "/jsonrpc.do" — für REST-Aufrufe unter demselben Host/Proxy-Pfad. */

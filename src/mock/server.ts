@@ -16,7 +16,7 @@ import { SESSION_COOKIE } from '../api/client';
 import { createMockState, handleRpc, type MockServerState } from './rpcHandler';
 import { mockExamsRest } from './examsRestMock';
 import { mockAbsencesRest } from './absencesRestMock';
-import { mockCalendarEntryDetail, parseIsoLocalDateTime } from './calendarEntryRestMock';
+import { MOCK_BEARER_AUTH_HEADER, MOCK_BEARER_TOKEN, mockCalendarEntryDetail, parseIsoLocalDateTime } from './calendarEntryRestMock';
 import type { MockElement } from './timetable';
 
 const JSONRPC_PATH = '/WebUntis/jsonrpc.do';
@@ -27,6 +27,8 @@ const JSONRPC_PATH = '/WebUntis/jsonrpc.do';
 const EXAMS_REST_PATH = '/WebUntis/api/exams';
 const ABSENCES_REST_PATH = '/WebUntis/api/classreg/absences/students';
 const CALENDAR_ENTRY_DETAIL_PATH = '/WebUntis/api/rest/view/v2/calendar-entry/detail';
+/** Siehe WebUntisClient.getRestBearer() — gemessen 2026-09-22, IDEEN.md B8 Fortsetzung. */
+const TOKEN_NEW_PATH = '/WebUntis/api/token/new';
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -78,6 +80,10 @@ export function createMockHttpServer(state: MockServerState = createMockState())
       handleDateRangeRest(state, req, url, res, ABSENCES_REST_PATH, mockAbsencesRest, 'absences');
       return;
     }
+    if (req.method === 'GET' && path === TOKEN_NEW_PATH) {
+      handleTokenNewRest(state, req, res);
+      return;
+    }
     if (req.method === 'GET' && path === CALENDAR_ENTRY_DETAIL_PATH) {
       handleCalendarEntryDetailRest(state, req, url, res);
       return;
@@ -87,7 +93,9 @@ export function createMockHttpServer(state: MockServerState = createMockState())
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          error: `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH}, GET ${EXAMS_REST_PATH}, GET ${ABSENCES_REST_PATH} oder GET ${CALENDAR_ENTRY_DETAIL_PATH}`,
+          error:
+            `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH}, GET ${EXAMS_REST_PATH}, ` +
+            `GET ${ABSENCES_REST_PATH}, GET ${TOKEN_NEW_PATH} oder GET ${CALENDAR_ENTRY_DETAIL_PATH}`,
         }),
       );
       return;
@@ -176,6 +184,24 @@ function handleDateRangeRest<T>(
 }
 
 /**
+ * Simuliert `/api/token/new` (siehe `WebUntisClient.getRestBearer()`, gemessen 2026-09-22,
+ * IDEEN.md B8 Fortsetzung) — liefert wie real einen rohen Text-Body, kein JSON.
+ */
+function handleTokenNewRest(state: MockServerState, req: IncomingMessage, res: ServerResponse): void {
+  const sessionId = readSessionCookie(req);
+  if (sessionId === undefined || !state.sessions.has(sessionId)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not authenticated (Annahme, real nie gemessen)' }));
+    return;
+  }
+
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end(MOCK_BEARER_TOKEN);
+  // eslint-disable-next-line no-console -- Mock-Server-Log ist gewollt, kein Produktionscode.
+  console.log(`  GET ${TOKEN_NEW_PATH.padEnd(40)} OK`);
+}
+
+/**
  * Simuliert den undokumentierten calendar-entry-detail-Endpunkt (siehe
  * api/calendarEntryRest.ts) — anderes Anfrage-/Antwortformat als die beiden Datumsbereich-
  * Endpunkte oben (ein einzelner Eintrag über exakte Start-/Endzeit statt einer Liste über
@@ -186,6 +212,16 @@ function handleCalendarEntryDetailRest(state: MockServerState, req: IncomingMess
   if (sessionId === undefined || !state.sessions.has(sessionId)) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'not authenticated (Annahme, real nie gemessen)' }));
+    return;
+  }
+
+  // Gemessen 2026-09-22 (siehe IDEEN.md B8 Fortsetzung, WebUntisClient.getRestBearer()):
+  // dieser Endpunkt-Zweig braucht zusaetzlich einen Bearer-Token, sonst HTTP 404 mit genau
+  // dieser Fehlerform — simuliert, damit `npm run mock` sich hier wie der echte Server
+  // verhaelt, nicht nur die MSW-Tests.
+  if (req.headers['authorization'] !== MOCK_BEARER_AUTH_HEADER) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ errorCode: 'NOT_FOUND', requestId: 'mock', traceId: 'mock', errorMessage: 'Not Found' }));
     return;
   }
 

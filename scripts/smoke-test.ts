@@ -21,6 +21,7 @@ import {
   formatWuDate,
   formatWuTime,
   toWuDate,
+  wuDateTimeToIsoLocal,
   wuWeekRange,
   WebUntisRpcError,
 } from '../src/api/index';
@@ -106,6 +107,79 @@ try {
   console.log(`        showBooking: ${withBooking.length} von ${periods.length} Perioden mit bkText/bkRemark`);
   for (const p of withBooking.slice(0, 3)) {
     console.log(`          ${formatWuDate(p.date)} ${formatWuTime(p.startTime)} — bkText="${p.bkText ?? ''}" bkRemark="${p.bkRemark ?? ''}"`);
+  }
+
+  // --- 3b) Diagnose: calendar-entry-detail, auf der Suche nach Notizen/Hausaufgaben --------
+  // Fortsetzung von IDEEN.md B8: api/calendarEntryRest.ts uebernimmt aus diesem Endpunkt
+  // bisher nur `teachingContent` ("Lehrstoff"). Die real gemessene Beispielantwort hatte
+  // `notesAll`/`notesStaff`/`homeworks` nur mit `null`/leer -- ihre Form bei tatsaechlichem
+  // Inhalt ist unbekannt und wird deshalb bewusst noch nicht in einen Typ gegossen
+  // (Projektregel: keine erfundenen Feldformen, siehe CLAUDE.md).
+  //
+  // *2026-09-22, geklaert:* dieser Endpunkt braucht einen separaten Bearer-Token (siehe
+  // `WebUntisClient.getRestBearer()`, `api/calendarEntryRest.ts`) -- ohne ihn kam bei JEDER
+  // Periode HTTP 404. Dieser Block nutzt jetzt denselben Weg wie die App selbst
+  // (`getCalendarEntryDetailRest`) und druckt `teachingContent`/`notesAll`/`notesStaff`/
+  // `homeworks` explizit fuer jede Periode, die darin etwas Nicht-Leeres hat -- Ergebnis
+  // bitte 1:1 (Namen/Ids unkenntlich gemacht) zurueckmelden, dann werden die echten Felder
+  // uebernommen.
+  //
+  // Bewusst klein gehalten (PLAN.md R7, Drosselung): standardmaessig nur die eine Woche,
+  // die oben schon geladen ist (`periods`), nicht das ganze Schuljahr wie bei 4c. Fuer eine
+  // bestimmte Woche, in der laut Original-App sicher etwas eingetragen ist:
+  //   WEBUNTIS_DIAG_START=20260921 WEBUNTIS_DIAG_END=20260925 npm run smoke
+  const diagStart = process.env['WEBUNTIS_DIAG_START'];
+  const diagEnd = process.env['WEBUNTIS_DIAG_END'];
+  const diagPeriods =
+    diagStart !== undefined && diagEnd !== undefined
+      ? await api.getTimetableCustom(client, {
+          element: { id: session.personId, type: session.personType },
+          startDate: Number(diagStart),
+          endDate: Number(diagEnd),
+          showInfo: true,
+          subjectFields: ['id', 'name'],
+        })
+      : periods;
+
+  console.log(
+    `\nDiagnose: calendar-entry-detail (mit Bearer-Token), ${diagPeriods.length} Perioden ` +
+      (diagStart !== undefined && diagEnd !== undefined ? `(${diagStart}–${diagEnd})` : '(aktuelle Woche)'),
+  );
+  const NOTE_FIELDS = ['teachingContent', 'notesAll', 'notesStaff', 'homeworks'] as const;
+  let diagHits = 0;
+  let diagErrors = 0;
+  for (const p of diagPeriods) {
+    const example = `${formatWuDate(p.date)} ${formatWuTime(p.startTime)} ${p.su?.[0]?.name ?? '?'}`;
+    try {
+      const raw = await client.getRestBearer<{ calendarEntries: Array<Record<string, unknown>> }>(
+        '/api/rest/view/v2/calendar-entry/detail',
+        {
+          elementId: session.personId,
+          elementType: session.personType,
+          startDateTime: wuDateTimeToIsoLocal(p.date, p.startTime),
+          endDateTime: wuDateTimeToIsoLocal(p.date, p.endTime),
+          homeworkOption: 'DUE',
+        },
+      );
+      const entry = raw.calendarEntries[0];
+      if (entry === undefined) continue;
+      const nonEmpty = (value: unknown) =>
+        value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0);
+      const hits = NOTE_FIELDS.filter((key) => nonEmpty(entry[key]));
+      if (hits.length > 0) {
+        diagHits += 1;
+        console.log(`  ${example}:`);
+        for (const key of hits) console.log(`    ${key} =`, JSON.stringify(entry[key]));
+      }
+    } catch (error) {
+      diagErrors += 1;
+      console.log(`  Fehler bei ${example}: ${describeError(error)}`);
+    }
+  }
+  console.log(`  ${diagHits} von ${diagPeriods.length} Perioden mit Inhalt in ${NOTE_FIELDS.join('/')}, ${diagErrors} Fehler.`);
+  if (diagHits === 0 && diagErrors === 0) {
+    console.log('  -> kein einziger Treffer -- diese Woche hat vermutlich einfach keine Notizen/Hausaufgaben.');
+    console.log('     Ggf. WEBUNTIS_DIAG_START/-END auf eine Woche mit bekanntem Inhalt setzen und erneut laufen lassen.');
   }
 
   // --- 4) Rechte-Check: was darf dieses Konto? ---------------------------

@@ -526,7 +526,120 @@ Link-Ziel, den der Screen per Effekt konsumiert und sofort wieder aus der URL en
 - [ ] Fehlerformat des calendar-entry-detail-Endpunkts bei abgelaufener Session — ungemessen
 - [ ] `teachingContent` bei einer im Stundenplan zusammengefassten Doppelstunde — die exakte
       Einzelstunden-Zeitspanne dafür wurde nie gemessen (siehe IDEEN.md B8)
-- [ ] `notesAll`/`notesStaff` — in der gemessenen Antwort beide `null`, unklar, wie befüllter
-      Inhalt aussieht oder ob er für ein Schüler-Konto überhaupt sichtbar wäre
+- [x] `notesAll`/`notesStaff`/`homeworks` — Ursache des HTTP-404 gefunden und behoben (fehlender
+      Bearer-Token, siehe "Notizen/Hausaufgaben" unten). `teachingContent` über eine ganze
+      Woche verifiziert (9 von 34 Perioden mit echtem Inhalt) und funktioniert damit gegen den
+      echten Server zum ersten Mal wirklich. `notesAll`/`notesStaff`/`homeworks` blieben über
+      dieselbe Woche bei 0 von 34 — auf Nutzerwunsch abgeschlossen, nicht weiter verfolgt
+      (siehe IDEEN.md B8, Fortsetzung): real selten befüllt, kaum sinnvoll zu testen.
 - [ ] Endpunkt für ein fremdes Element (Anderen Plan ansehen) — nie gemessen, deshalb bewusst
       nur für den eigenen Plan angefragt
+
+### Notizen/Hausaufgaben: erster Diagnose-Lauf — HTTP 404 bei calendar-entry-detail (2026-09-22)
+
+Fortsetzung von B8 (siehe oben): Nutzerwunsch war, auch `notesAll`/`notesStaff`/`homeworks`
+aus demselben Endpunkt zu zeigen, nicht nur `teachingContent`. `scripts/smoke-test.ts` bekam
+dafür einen Diagnose-Block, der den Endpunkt für jede Periode einer Woche roh aufruft (siehe
+IDEEN.md B8, Fortsetzung).
+
+**Echter Lauf, echtes Schüler-Konto, Woche 21.–27.09.2026, 34 Perioden:**
+
+```
+Diagnose: calendar-entry-detail roh, 34 Perioden (aktuelle Woche)
+  Fehler bei 21.09.2026 15:00: HTTP 404
+  Fehler bei 23.09.2026 07:50: HTTP 404
+  … (alle 34 Perioden, ausnahmslos HTTP 404)
+  -> kein einziger Treffer mit zusaetzlichem Feldinhalt in diesem Zeitraum.
+```
+
+**Wichtig: das ist KEIN "kein Treffer"-Fall.** Ein fehlender Treffer (z. B. weil die
+Zeitspanne nicht exakt passt) liefert laut B8 normalerweise HTTP 200 mit leerem
+`calendarEntries`-Array — das kennen wir schon vom echten "Lehrstoff"-Fund. Hier kam
+stattdessen bei **jeder einzelnen** von 34 Perioden derselbe HTTP-Fehler, unabhängig von
+Fach/Uhrzeit. Das spricht für ein strukturelles Problem (Routing, fehlende Auth, geänderter
+Pfad) statt für fehlende Daten an diesem Tag.
+
+**Bewusst noch ungeklärt:** dieser Lauf fing den Fehler nur grob als HTTP-Status ab
+(`describeError`), ohne den Response-Body zu zeigen — der hätte sofort verraten, ob es eine
+generische Webserver-404-Seite ist (Pfad/Routing) oder eine WebUntis-JSON-Fehlermeldung
+(z. B. "unauthorized"). `scripts/smoke-test.ts` wurde danach erweitert (siehe IDEEN.md B8,
+Fortsetzung): `WebUntisClient` hat jetzt `getRestRaw()` (Status+Body ohne `JSON.parse`, ohne
+bei Fehlerstatus zu werfen, mit optionalen Extra-Headern) für genau solche Fälle, und der
+Diagnose-Block gruppiert Fehler jetzt nach Signatur und zeigt den vollen Body.
+
+**Zweiter Lauf, dieselbe Woche, mit Body — Ursache gefunden:**
+
+```
+34 von 34 Perioden fehlgeschlagen, 34 unterschiedliche Auspraegung(en):
+    HTTP 404 (1x, z. B. 21.09.2026 15:00 AM)
+      Body: {"errorCode":"NOT_FOUND","requestId":"2844d928…","traceId":"09c4eed0…","errorMessage":"Not Found"}
+```
+
+Jede Periode hatte eine EIGENE `requestId`, aber dieselbe `traceId` — eine WebUntis-eigene
+JSON-Fehlermeldung, keine generische Webserver-Seite. Das bestätigt: der Server hat die
+Anfrage verstanden und bewusst abgelehnt, kein Pfad-/Routing-Fehler.
+
+**Hypothesentest (`GET /api/token/new`) bestätigt die Bearer-Token-Vermutung:**
+
+```
+Hypothese: /api/token/new liefert einen Bearer-Token fuer api/rest/view/v2/*
+  HTTP 200, 834 Zeichen -- sieht wie ein JWT aus (drei Punkt-getrennte Teile): eyJraWQiOiI3MzIxNjk2MzYi…
+  Erneuter Versuch MIT "Authorization: Bearer …": HTTP 200
+    Body: {"calendarEntries":[{"id":9390319,"previousId":9022654,"nextId":9022660,
+      "absenceReasonId":null,"booking":null,"color":null,"endDateTime":"2026-09-21T15:50:00",
+      "exam":null,"homeworks":[],"klasses":[{"displayName":"3BHIF","hasTimetable":true,
+      "id":5022,"longName":"IF-Höhere","shortName":"3BHIF"}], …
+```
+
+`GET /api/token/new` liefert mit der bestehenden `JSESSIONID`-Session ein rohes JWT (kein
+JSON, keine umschließenden Anführungszeichen). Mit `Authorization: Bearer <token>` liefert
+`calendar-entry/detail` HTTP 200 mit echten Daten. **Neue Erkenntnis nebenbei:** `homeworks`
+ist strukturell ein Array (hier leer `[]`), nicht `null` wie in der einzelnen B8-Messung
+angenommen — auch `previousId`/`nextId` (Verweise auf Nachbarperioden) sind neu.
+
+**Umgesetzt:**
+- `WebUntisClient.getRestBearer()` (`api/client.ts`) — holt den Token selbst (Single-Flight-
+  Cache, ein Retry bei HTTP 401/403, Invalidierung bei jedem Sessionwechsel), teilt sich
+  Warteschlange/Drosselung mit `call()`/`getRest()`. 6 neue Tests.
+- `api/calendarEntryRest.ts` nutzt jetzt `getRestBearer()` statt `getRest()` — der
+  "Lehrstoff"-Fund aus B8 funktioniert dadurch gegen den echten Server jetzt tatsächlich
+  (vorher war er durch das fehlende Auth-Schema faktisch tot, siehe oben).
+- Mock (`mock/calendarEntryRestMock.ts`, `mock/msw/handlers.ts`, `mock/server.ts`): simuliert
+  `/api/token/new` und prüft den `Authorization`-Header auf `calendar-entry/detail` genauso
+  streng wie real (HTTP 404 mit derselben Fehlerform ohne gültigen Token) — damit fällt ein
+  versehentlicher Rückfall auf `getRest()` sofort im Test auf. Per curl gegen den laufenden
+  `npm run mock`-Server end-to-end nachvollzogen (401 ohne Session → 404 ohne Token → 200 mit
+  Token), nicht nur über die Unit-Tests.
+
+**Dritter Lauf, ganze Woche 21.–27.09.2026, mit funktionierendem Bearer-Token:**
+
+```
+Diagnose: calendar-entry-detail (mit Bearer-Token), 34 Perioden (aktuelle Woche)
+  21.09.2026 15:00 AM:        teachingContent = "Folgen, a. +g.F"
+  24.09.2026 09:40 D:         teachingContent = "Diskussionsthemen sammeln\nandere überzeugen: …"
+  22.09.2026 09:40 RK:        teachingContent = "supplierung"
+  21.09.2026 15:50 GGP:       teachingContent = "Bedürfnis Wirtschaftlichkeitsprinzipien Arten von Gütern"
+  21.09.2026 14:00 POS1:      teachingContent = "Planspiel SW-Engineering: MediaLibrary"
+  22.09.2026 08:40 BWM_2:     teachingContent = "Handel"
+  21.09.2026 11:20 DBI_1:     teachingContent = "Einführung"
+  21.09.2026 09:40 WMC_1:     teachingContent = "UE302"
+  21.09.2026 10:30 WMC_1:     teachingContent = "UE302"
+  9 von 34 Perioden mit Inhalt in teachingContent/notesAll/notesStaff/homeworks, 0 Fehler.
+```
+
+**`teachingContent` ("Lehrstoff") ist damit vollständig verifiziert:** 9 von 34 Perioden quer
+durch verschiedene Fächer, echter mehrsprachiger/mehrzeiliger Inhalt, 0 Fehler. Die Funktion
+war seit B8 (2026-09-17) im Code, aber gegen den echten Server durch den fehlenden Bearer-Token
+faktisch nie erreichbar — jetzt zum ersten Mal wirklich mit echten Daten bestätigt.
+
+**`notesAll`/`notesStaff`/`homeworks` dagegen: 0 von 34, durchgehend leer** — auch bei genau
+den 9 Perioden, die `teachingContent` hatten. Das ist jetzt eine echte Stichprobe über eine
+ganze Woche (nicht mehr nur ein einzelnes `null`-Beispiel wie in B8).
+
+**Abgeschlossen, 2026-09-22 (Entscheidung des Nutzers, siehe IDEEN.md B8 Fortsetzung):** diese
+drei Felder werden laut Nutzer real selten befüllt und sind dadurch kaum sinnvoll zu testen.
+Wichtig sind stattdessen `teachingContent` (jetzt oben verifiziert) und das bereits vorhandene,
+**dokumentierte** `Period.info`-Feld ("Zusatzinfo" in `PeriodDetail.tsx`) — dort tragen
+Lehrkräfte an dieser Schule kurze Hinweise wie "Test"/"MÜ" ein, siehe das schon gemessene
+Beispiel `info: "SMÜ Nomenklatur"` weiter oben in diesem Abschnitt. `notesAll`/`notesStaff`/
+`homeworks` werden bewusst NICHT in `RestCalendarEntryDetail` übernommen.

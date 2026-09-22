@@ -36,10 +36,19 @@
  * die Anfrage liefert dann einfach keinen Treffer (leeres `calendarEntries`), siehe
  * TESTING.md.
  *
- * Risiko und Fehlerbehandlung: wie `examsRest.ts` — ungemessenes Fehlerformat, nur grober
- * HTTP-Status (siehe `WebUntisClient.getRest`). Kein Retry bei Fehlschlag (siehe
+ * WICHTIG, gemessen 2026-09-22 (siehe IDEEN.md B8, Fortsetzung): dieser Endpunkt braucht,
+ * anders als `examsRest.ts`/`absencesRest.ts`, einen ZUSÄTZLICHEN Bearer-Token — das
+ * JSESSIONID-Cookie allein reicht nicht. Ohne `Authorization`-Header antwortet der Server
+ * mit HTTP 404 (nicht 401!) für JEDE Anfrage, egal ob es einen Treffer gäbe — sieht aus wie
+ * "Route existiert nicht", ist aber "kein gültiger Token". `WebUntisClient.getRestBearer()`
+ * holt den Token selbst über `GET /api/token/new` und cached ihn; siehe dessen Doku-Kommentar
+ * für Details (Token-Format, Retry-Verhalten).
+ *
+ * Risiko und Fehlerbehandlung: wie `examsRest.ts` — ungemessenes Fehlerformat für den
+ * eigentlichen Endpunkt, nur grober HTTP-Status. Kein Retry bei Fehlschlag (siehe
  * `TimetableScreen.tsx`), um bei einem unbekannten Fehler (z. B. Rate-Limit) nicht
- * automatisch nachzuhaken.
+ * automatisch nachzuhaken — das gilt weiterhin, der automatische Retry in `getRestBearer()`
+ * betrifft ausschließlich einen abgelaufenen/ungültigen Token (401/403), nicht andere Fehler.
  */
 
 import type { WebUntisClient } from './client';
@@ -68,7 +77,7 @@ export async function getCalendarEntryDetailRest(
   client: WebUntisClient,
   params: RestCalendarEntryDetailParams,
 ): Promise<RestCalendarEntryDetail | undefined> {
-  const response = await client.getRest<RestCalendarEntryDetailResponse>('/api/rest/view/v2/calendar-entry/detail', {
+  const response = await client.getRestBearer<RestCalendarEntryDetailResponse>('/api/rest/view/v2/calendar-entry/detail', {
     elementId: params.elementId,
     elementType: params.elementType,
     startDateTime: params.startDateTime,

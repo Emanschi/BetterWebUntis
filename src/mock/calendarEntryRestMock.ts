@@ -7,12 +7,27 @@
  *
  * "Eine Fachlogik, zwei Transporte" wie examsRestMock.ts: dieselbe Funktion bedient
  * `mock/server.ts` (Node-HTTP) und `mock/msw/handlers.ts` (Tests).
+ *
+ * Simuliert auch `/api/token/new` (siehe `WebUntisClient.getRestBearer()`, gemessen
+ * 2026-09-22, IDEEN.md B8 Fortsetzung): dieser Endpunkt-Zweig braucht real einen separaten
+ * Bearer-Token, ohne den kam HTTP 404 statt eines leeren Treffers — die Mock-Handler prüfen
+ * deshalb bewusst denselben Header, damit ein versehentlicher Wechsel zurück auf `getRest()`
+ * (ohne Token) sofort im Test auffällt, statt nur real zu brechen.
  */
 
 import { toWuDate } from '../api/format';
 import type { RestCalendarEntryDetail } from '../api/calendarEntryRest';
 import type { WuDate, WuTime } from '../api/types';
 import { rawPeriodsForElement, type MockElement } from './timetable';
+
+/**
+ * Platzhalter, kein echtes JWT — `api/client.ts` prüft den Inhalt nirgends, nur ob der
+ * `Authorization`-Header beim eigentlichen Aufruf mitkommt (siehe Datei-Kommentar oben).
+ */
+export const MOCK_BEARER_TOKEN = 'mock.bearer.token';
+
+/** Erwarteter `Authorization`-Header-Wert für einen gültigen simulierten Bearer-Token. */
+export const MOCK_BEARER_AUTH_HEADER = `Bearer ${MOCK_BEARER_TOKEN}`;
 
 /**
  * "YYYY-MM-DDTHH:mm:ss" (lokale Zeit, kein Offset) → WuDate/WuTime. Gegenstück zu
