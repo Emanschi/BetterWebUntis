@@ -26,7 +26,7 @@ afterEach(() => {
   vi.useRealTimers();
   useSessionStore.setState({
     status: 'idle',
-    school: '',
+    school: null,
     username: undefined,
     personType: undefined,
     personId: undefined,
@@ -44,13 +44,15 @@ async function loginAsStudent() {
     buildClient: (school) =>
       new WebUntisClient({
         endpoint: 'https://mock.local/WebUntis/jsonrpc.do',
-        school,
+        school: school.loginName,
         client: 'BetterWebUntis-Test',
         transport: new FetchTransport({ canSetCookieHeader: true }),
         minRequestGapMs: 0,
       }),
   });
-  await testStore.getState().login('mockschule', 'mmuster', 'test1234');
+  await testStore
+    .getState()
+    .login({ server: 'mock.local', loginName: 'mockschule', displayName: 'Mock-HTL' }, 'mmuster', 'test1234');
   useSessionStore.setState(testStore.getState());
 }
 

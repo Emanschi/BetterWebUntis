@@ -17,7 +17,7 @@ afterEach(() => {
   vi.useRealTimers();
   useSessionStore.setState({
     status: 'idle',
-    school: '',
+    school: null,
     username: undefined,
     personType: undefined,
     personId: undefined,
@@ -28,7 +28,8 @@ afterEach(() => {
 });
 
 async function loginAs(user: ReturnType<typeof userEvent.setup>, name: string, password: string) {
-  await user.type(screen.getByLabelText('Schule'), 'mockschule');
+  await user.type(screen.getByLabelText('Schule'), 'Mock-HTL');
+  await user.click(await screen.findByRole('button', { name: /Mock-HTL/ }));
   await user.type(screen.getByLabelText('Benutzername'), name);
   await user.type(screen.getByLabelText('Passwort'), password);
   await user.click(screen.getByRole('button', { name: 'Anmelden' }));

@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { createSessionStore } from '../sessionStore';
+import { createSessionStore, type StoredSchool } from '../sessionStore';
 import { WebUntisClient } from '../../api/client';
 import { FetchTransport } from '../../api/transport';
 import { setupMockWebUntisServer } from '../../mock/msw/testServer';
 
 setupMockWebUntisServer();
 
-function buildTestClient(school: string): WebUntisClient {
+const TEST_SCHOOL: StoredSchool = { server: 'mock.local', loginName: 'mockschule', displayName: 'Mock-HTL' };
+
+function buildTestClient(school: StoredSchool): WebUntisClient {
   return new WebUntisClient({
     endpoint: 'https://mock.local/WebUntis/jsonrpc.do',
-    school,
+    school: school.loginName,
     client: 'BetterWebUntis-Test',
     transport: new FetchTransport({ canSetCookieHeader: true }),
     minRequestGapMs: 0,
@@ -26,7 +28,7 @@ describe('sessionStore', () => {
 
   it('meldet erfolgreich an und merkt sich personType/personId', async () => {
     const useStore = createSessionStore({ buildClient: buildTestClient });
-    await useStore.getState().login('mockschule', 'mmuster', 'test1234');
+    await useStore.getState().login(TEST_SCHOOL, 'mmuster', 'test1234');
 
     const state = useStore.getState();
     expect(state.status).toBe('authenticated');
@@ -38,7 +40,7 @@ describe('sessionStore', () => {
 
   it('setzt status auf error bei falschen Zugangsdaten, ohne zu werfen', async () => {
     const useStore = createSessionStore({ buildClient: buildTestClient });
-    await useStore.getState().login('mockschule', 'mmuster', 'falsches-passwort');
+    await useStore.getState().login(TEST_SCHOOL, 'mmuster', 'falsches-passwort');
 
     const state = useStore.getState();
     expect(state.status).toBe('error');
@@ -48,7 +50,7 @@ describe('sessionStore', () => {
 
   it('logout setzt den Zustand zurueck', async () => {
     const useStore = createSessionStore({ buildClient: buildTestClient });
-    await useStore.getState().login('mockschule', 'mmuster', 'test1234');
+    await useStore.getState().login(TEST_SCHOOL, 'mmuster', 'test1234');
     expect(useStore.getState().status).toBe('authenticated');
 
     await useStore.getState().logout();
@@ -61,10 +63,10 @@ describe('sessionStore', () => {
 
   it('ein zweiter Login-Versuch nach einem Fehler kann trotzdem gelingen', async () => {
     const useStore = createSessionStore({ buildClient: buildTestClient });
-    await useStore.getState().login('mockschule', 'mmuster', 'falsch');
+    await useStore.getState().login(TEST_SCHOOL, 'mmuster', 'falsch');
     expect(useStore.getState().status).toBe('error');
 
-    await useStore.getState().login('mockschule', 'mmuster', 'test1234');
+    await useStore.getState().login(TEST_SCHOOL, 'mmuster', 'test1234');
     expect(useStore.getState().status).toBe('authenticated');
   });
 });

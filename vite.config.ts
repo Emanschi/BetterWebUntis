@@ -22,6 +22,24 @@ function devProxyConfig(env: Record<string, string>) {
     );
   }
   return {
+    // Reihenfolge wichtig: Vite prüft Proxy-Regeln in der Reihenfolge, in der sie hier
+    // stehen, und nimmt die erste passende — die spezifischere Route muss deshalb VOR der
+    // allgemeinen "/WebUntis" stehen, sonst würde diese jede Anfrage zuerst abfangen.
+    //
+    // Schulsuche (siehe api/schoolSearchRest.ts, gemessen 2026-09-24, TESTING.md): fest
+    // auf WebUntis' eigenen zentralen Suchdienst verdrahtet, unabhängig von
+    // VITE_WEBUNTIS_SERVER — der ist ja gerade dafür da, eine BELIEBIGE Schule zu finden,
+    // nicht nur die hier lokal konfigurierte. Bewusste Einschränkung: dadurch braucht
+    // `npm run dev` für die Schulsuche selbst immer Internetzugang, auch im Mock-Betrieb
+    // (`npm run mock` implementiert "/WebUntis/schoolsearch" zwar auch, siehe
+    // mock/schoolSearchMock.ts, wird dafür aber nie erreicht) — sonst würde die Suche beim
+    // Testen gegen die echte Schule (der eigentliche Zweck dieser Route) leer laufen.
+    '/WebUntis/schoolsearch': {
+      target: 'https://mobile.webuntis.com',
+      changeOrigin: true,
+      secure: true,
+      rewrite: () => '/ms/schoolquery2',
+    },
     // Pfad bewusst exakt "/WebUntis" (Großschreibung wie beim echten Server), OHNE
     // Umschreibung: WebUntis setzt das Session-Cookie mit "Path=/WebUntis" (gemessen,
     // siehe TESTING.md). Pfad-Matching für Cookies ist case-sensitiv — ein Proxy-Pfad
@@ -37,15 +55,22 @@ function devProxyConfig(env: Record<string, string>) {
   };
 }
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
+  // NICHT ueber "command === 'serve'" unterscheiden: vite-node (scripts/mock-server.ts,
+  // scripts/smoke-test.ts, siehe package.json) laeuft intern über denselben Vite-Dev-
+  // Server-Code und meldet ebenfalls command "serve", obwohl es mit dem Browser-Dev-Proxy
+  // nichts zu tun hat und kein VITE_WEBUNTIS_SERVER braucht (gemessen: ctx.command war in
+  // beiden Faellen identisch "serve"). npm_lifecycle_event unterscheidet zuverlaessig
+  // zwischen den npm-Skripten selbst.
+  const isViteDevServer = process.env['npm_lifecycle_event'] === 'dev';
 
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
-    ...(command === 'serve' ? { server: { proxy: devProxyConfig(env) } } : {}),
+    ...(isViteDevServer ? { server: { proxy: devProxyConfig(env) } } : {}),
     build: {
       outDir: BUILD_OUT,
       emptyOutDir: true,

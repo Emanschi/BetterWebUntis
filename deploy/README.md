@@ -4,6 +4,11 @@ Zwei Teile gehören auf den Server: die gebaute Web-App (statische Dateien) und 
 PHP-Proxy (Hintergrund: [PLAN.md](../PLAN.md) R1 — WebUntis erlaubt keine direkten
 Browser-Zugriffe). Beides landet **im selben Ordner**, im Web-Root der Subdomain.
 
+Der Proxy ist **nicht auf eine bestimmte Schule festgelegt** — welche Schule gemeint ist,
+kommt aus der Schulsuche im Login (siehe IDEEN.md B11). Ein Deployment bedient damit jede
+WebUntis-Schule, nicht nur die eigene; an der Datei `webuntis-proxy.php` selbst gibt es
+nichts anzupassen.
+
 ## 1. Bauen
 
 ```bash
@@ -24,13 +29,7 @@ web/
 Die Hash-Namen (`XXXXXXXX`) ändern sich bei jedem Build — einfach den ganzen Ordnerinhalt
 nehmen, nicht die Namen von Hand eintragen.
 
-## 2. Proxy anpassen (falls nötig)
-
-`deploy/webuntis-proxy.php` hat den Schulserver bereits fest eingetragen
-(`htlstp.webuntis.com`) — für eine andere Schule oben in der Datei `WEBUNTIS_HOST` ändern.
-Sonst: nichts zu tun, keine Zugangsdaten, keine Konfiguration.
-
-## 3. Hochladen — diese Dateien in den Web-Root der Subdomain (z. B. per FTP/SFTP,
+## 2. Hochladen — diese Dateien in den Web-Root der Subdomain (z. B. per FTP/SFTP,
 Zugangsdaten aus dem World4You-Kundenmenü):
 
 | Datei/Ordner (Quelle) | Ziel im Web-Root |
@@ -54,11 +53,12 @@ Am Ende sieht der Web-Root so aus:
 
 Kein `node_modules`, kein Quellcode, keine `.env` — nur diese vier/fünf Dateien.
 
-## 4. Testen
+## 3. Testen
 
 1. Subdomain im Browser öffnen (mit **https://**, nicht http).
-2. Mit echten WebUntis-Zugangsdaten einloggen.
-3. Klappt der Login und zeigt der Stundenplan Daten → fertig.
+2. Im Feld "Schule" den eigenen Schulnamen oder Ort eintippen und aus der Liste auswählen.
+3. Mit echten WebUntis-Zugangsdaten einloggen.
+4. Klappt der Login und zeigt der Stundenplan Daten → fertig.
 
 ## Bekannte Stolpersteine
 
@@ -76,6 +76,10 @@ Kein `node_modules`, kein Quellcode, keine `.env` — nur diese vier/fünf Datei
   Im World4You-Kundenmenü lässt sich die PHP-Version pro Subdomain einstellen.
 - **`curl`-Erweiterung fehlt:** sehr unüblich bei Standard-Hosting, der Proxy meldet das
   dann selbst mit einer klaren Fehlermeldung statt eines kryptischen 500ers.
+- **Schulsuche findet nichts / hängt:** der Proxy braucht dafür ausgehende HTTPS-Verbindungen
+  zu `mobile.webuntis.com` (WebUntis' eigener Suchdienst, siehe oben) — bei den meisten
+  Hosting-Paketen uneingeschränkt möglich, bei sehr restriktiven Setups ggf. beim Support
+  nachfragen.
 
 ## Was das NICHT abdeckt
 

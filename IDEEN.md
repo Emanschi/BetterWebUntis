@@ -455,6 +455,97 @@ gegen den echten Server nicht ausreicht (weiterhin spürbar langsam für den rel
 wäre kontrollierte Nebenläufigkeit (z. B. 3–4 Aufrufe gleichzeitig) der nächste Schritt — aber
 erst nach einem erneuten Test gegen den echten Server, nicht auf Verdacht.
 
+### B11 — Produktions-Proxy für beliebige Schulen statt nur die eigene, per Schulsuche (Nutzerwunsch 2026-09-24)
+
+**Ausgangspunkt:** nach der v1.1.0-Deploy-Anleitung (Proxy fest auf `htlstp.webuntis.com`
+verdrahtet) der berechtigte Einwand: *"aber dann könnten andere Schulen es nicht auch
+verwenden. Das Proxy muss auf das redirecten was beim Login bei der Schule eingetragen
+wird."* Richtig erkannt, aber mit einer Annahme, die so nicht stimmt: "Schule"
+(`?school=`-Parameter, z. B. `htlstp`) und der Server-Hostname (`htlstp.webuntis.com`) sehen
+bei dieser einen Schule zufällig fast gleich aus, sind bei WebUntis aber zwei unabhängige
+Dinge — viele Schulen teilen sich einen Server (WebUntis clustert regional), andere haben
+einen eigenen. `"<eingetippte-schule>.webuntis.com"` zusammenzubauen hätte nur hier
+funktioniert, bei den meisten anderen Schulen auf einen falschen/nicht existierenden Host
+gezeigt.
+
+**Zwei Wege wurden zur Wahl gestellt:** (A) ein zweites "Server"-Eingabefeld beim Login,
+Nutzer muss den Hostnamen selbst kennen — sofort baubar, kein neuer Endpunkt; oder (B)
+automatische Schulsuche wie im offiziellen WebUntis-Login, nur der Schulname/Ort wird
+getippt. **Entscheidung: (B)**, obwohl das einen bisher unangefassten undokumentierten
+Endpunkt braucht.
+
+**Endpunkt verifiziert, 2026-09-24 (siehe TESTING.md), vom Nutzer selbst per curl
+gemessen (kein Login nötig, deshalb ohne Zugangsdaten prüfbar):**
+`POST https://mobile.webuntis.com/ms/schoolquery2`, JSON-RPC-Methode `searchSchool`,
+Parameter `[{"search": "<begriff>"}]`. Antwort enthält `result.schools[]` mit u. a.
+`server`, `loginName`, `displayName`, `address` — genau die Felder, die für einen Login
+gebraucht werden. Eine Suche nach "pölten" lieferte 18 echte, unterschiedliche Schulen
+(`htlstp.webuntis.com`/`htlstp` korrekt darunter). Zwei Eigenheiten gemessen und in
+`api/schoolSearchRest.ts` dokumentiert: `result.size` war `0`, obwohl `schools` 18 Einträge
+enthielt (unzuverlässig, bewusst ignoriert, Array-Länge zählt stattdessen);
+`mobileServiceUrlAndroid`/`mobileServiceUrlIos`/`mobileServiceUrl` waren in jeder Zeile
+`false`/`false`/`null` — was ein abweichender Wert bedeutet, ist ungemessen und wird nicht
+unterstützt.
+
+**Umgesetzt:**
+- `api/schoolSearchRest.ts` (neu, unter `restApi`, siehe CLAUDE.md-Tabelle) — `searchSchools()`,
+  ohne `WebUntisClient` (vor dem Login existiert noch keiner), nutzt aber dieselbe
+  `RpcTransport`-Abstraktion wie der Client.
+- `api/client.ts` — neue Option `targetHost`, wird als Header `X-WebUntis-Host` auf jeden
+  Request gelegt (jsonrpc.do UND alle REST-Aufrufe). `api/index.ts`s `createWebUntisClient()`
+  reicht `server` im Proxy-Betrieb jetzt als `targetHost` durch (vorher: nur für den
+  direkten/nativen Zugriff relevant).
+- `deploy/webuntis-proxy.php` — zwei Ziel-Zonen statt einer festen `WEBUNTIS_HOST`-Konstante:
+  (1) `/WebUntis/schoolsearch` geht immer fest an `mobile.webuntis.com` (kein Login,
+  gleich für jede Schule); (2) die fünf bestehenden API-Pfade lesen ihr Ziel jetzt aus
+  `X-WebUntis-Host`, streng validiert gegen `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.webuntis\.com$`
+  (sonst wäre das ein offener Proxy, SSRF). Ergebnis: **ein Deployment bedient jetzt jede
+  WebUntis-Schule**, an der Datei selbst gibt es nichts mehr pro Schule anzupassen.
+- `state/sessionStore.ts` — `school` ist jetzt `StoredSchool | null`
+  (`{server, loginName, displayName}`) statt eines bloßen Strings; `login()` erwartet
+  entsprechend ein aufgelöstes Objekt statt eines getippten Namens. `localStorage`-Format
+  dadurch geändert (JSON statt Rohstring) — ein alter Eintrag aus v1.1.0 lässt sich nicht mehr
+  parsen und wird bewusst als "nichts gemerkt" behandelt (kein Migrations-Shim für einen
+  einmaligen, sich selbst heilenden Komfortverlust).
+- `ui/screens/LoginScreen.tsx` — "Schule" ist jetzt ein Suchfeld (debounced, 400 ms, ab 2
+  Zeichen): Tippen zeigt passende Schulen (Name + Adresse, zur Unterscheidung
+  gleichnamiger Schulen in unterschiedlichen Orten) als klickbare Liste; erst nach
+  Auswahl sind Benutzername/Passwort sinnvoll ausfüllbar — ohne Auswahl zeigt "Anmelden"
+  einen Hinweis statt stillschweigend nichts zu tun.
+- `vite.config.ts` (Dev-Proxy) — `/WebUntis/schoolsearch` fest auf `mobile.webuntis.com`
+  geroutet, unabhängig von `VITE_WEBUNTIS_SERVER`. **Bewusster Kompromiss:** dadurch braucht
+  die Schulsuche in `npm run dev` immer echtes Internet, auch im Mock-Betrieb (`npm run mock`
+  implementiert `/WebUntis/schoolsearch` zwar auch, aus Parität mit den MSW-Tests, wird dafür
+  aber vom Dev-Proxy nie erreicht) — sonst hätte man gegen die echte Schule (der eigentliche
+  Zweck dieser Route) lokal gar nicht testen können, da der ansonsten für ALLES zuständige
+  `/WebUntis`-Proxy fest auf eine einzelne `VITE_WEBUNTIS_SERVER` zeigt und `.env` nicht "die
+  echte Schule UND gleichzeitig beliebige andere" gleichzeitig abbilden kann.
+- Mocks (`mock/schoolSearchMock.ts`, `mock/server.ts`, `mock/msw/handlers.ts`) simulieren
+  denselben Endpunkt für die Vitest-Suite — 3 Fake-Schulen, "Mock-HTL" ist die einzige mit
+  gültigen Fake-Accounts.
+
+**Nebenfund beim Testen:** `vite.config.ts`s Dev-Proxy-Zwang (siehe unten, "kein Fallback
+mehr auf htlstp") brach `npm run mock` und `npm run smoke`, weil `vite-node` intern
+denselben `command: "serve"` wie der echte Dev-Server meldet — beide ließen sich mit
+`ctx.command` also nicht unterscheiden (empirisch geprüft, nicht angenommen). Fix:
+`process.env.npm_lifecycle_event === 'dev'` statt `command === 'serve'`, siehe CLAUDE.md.
+
+**Manuell verifiziert** (Mock-Server + echter Dev-Proxy zur echten Schulsuche, Light Mode,
+frischer Tab): Suche nach "Mock" zeigt binnen ~1,4 s eine echte, andere Schule
+("Sophie-von-Brabant-Schule", Marburg) — beweist, dass die Suche wirklich gegen
+`mobile.webuntis.com` läuft, nicht gegen einen Mock. Auswahl übernimmt Namen korrekt ins
+Feld, Login mit `mmuster`/`test1234` gelingt trotzdem (der Dev-Proxy ignoriert
+`X-WebUntis-Host` bewusst, bleibt fest auf dem Mock-Server) und der Stundenplan lädt. Nach
+Abmelden ist exakt diese Schule als Vorauswahl wieder da (`StoredSchool`-Persistenz
+funktioniert). `npm run build` und `npm run mock` liefen im selben Zug ohne `.env`
+erfolgreich durch. Typecheck sauber, 309/309 Tests grün (13 neu: `schoolSearchRest.test.ts`,
+`client.test.ts` X-WebUntis-Host, 3 neue LoginScreen-Suchtests).
+
+**Bewusst NICHT gemacht/offen:** der neu gebaute Proxy wurde nicht gegen einen echten
+Apache+PHP-Host deployt (derselbe Vorbehalt wie schon bei B1/B9 — kein `php -l` in dieser
+Umgebung verfügbar); ob `mobile.webuntis.com` für ALLE WebUntis-Instanzen weltweit
+(nicht nur österreichische Schulen) dieselbe Antwortform liefert, ist ungemessen.
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.

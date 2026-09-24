@@ -17,7 +17,7 @@ afterEach(() => {
   vi.useRealTimers();
   useSessionStore.setState({
     status: 'idle',
-    school: '',
+    school: null,
     username: undefined,
     personType: undefined,
     personId: undefined,
@@ -32,7 +32,8 @@ describe('ICS-Export (M8, Nachbesserung IDEEN.md B3: Grundlage ist der Stundenpl
     const user = userEvent.setup();
     render(<App />);
 
-    await user.type(screen.getByLabelText('Schule'), 'mockschule');
+    await user.type(screen.getByLabelText('Schule'), 'Mock-HTL');
+    await user.click(await screen.findByRole('button', { name: /Mock-HTL/ }));
     await user.type(screen.getByLabelText('Benutzername'), 'mmuster');
     await user.type(screen.getByLabelText('Passwort'), 'test1234');
     await user.click(screen.getByRole('button', { name: 'Anmelden' }));

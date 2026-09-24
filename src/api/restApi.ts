@@ -7,3 +7,4 @@
 export * from './examsRest';
 export * from './absencesRest';
 export * from './calendarEntryRest';
+export * from './schoolSearchRest';

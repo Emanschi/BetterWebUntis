@@ -26,6 +26,14 @@ export interface WebUntisClientOptions {
   /** Schulname für den `?school=`-Parameter, z. B. "htlstp". */
   school: string;
   /**
+   * Hostname des echten WebUntis-Servers dieser Schule, z. B. "htlstp.webuntis.com" —
+   * NUR im Proxy-Betrieb nötig (der Produktions-Proxy bedient beliebige Schulen, siehe
+   * deploy/webuntis-proxy.php, und muss pro Anfrage wissen, wohin). Wird als Header
+   * `X-WebUntis-Host` auf jeden Request gelegt; bei direktem Zugriff (nativ/Node, `server`
+   * schon Teil der `endpoint`-URL) wird das Feld ignoriert.
+   */
+  targetHost?: string;
+  /**
    * Eindeutiger Bezeichner der Client-App (Doku Abschnitt 1: "The parameter client is a
    * unique identifier for the client app. The parameter client will be mandatory in the future.").
    */
@@ -46,6 +54,7 @@ export class WebUntisClient {
   readonly school: string;
   readonly clientId: string;
 
+  readonly #targetHost: string | undefined;
   readonly #transport: RpcTransport;
   readonly #minGapMs: number;
   /** Cookie-Jar. Nur relevant, wenn der Transport den Cookie-Header setzen darf. */
@@ -68,6 +77,7 @@ export class WebUntisClient {
     this.endpoint = options.endpoint;
     this.school = options.school;
     this.clientId = options.client;
+    this.#targetHost = options.targetHost;
     this.#transport = options.transport ?? new FetchTransport();
     this.#minGapMs = options.minRequestGapMs ?? 120;
   }
@@ -190,6 +200,7 @@ export class WebUntisClient {
       // Doku Seite 1: "Content-Type should be set to text/plain or application/json"
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      ...this.#targetHostHeader(),
     };
     if (this.#transport.canSetCookieHeader) {
       const cookieHeader = this.#cookieHeader();
@@ -347,7 +358,11 @@ export class WebUntisClient {
     for (const [key, value] of Object.entries(query)) qs.set(key, String(value));
     const url = `${this.#restBase()}${path}?${qs.toString()}`;
 
-    const headers: Record<string, string> = { Accept: 'application/json', ...extraHeaders };
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      ...this.#targetHostHeader(),
+      ...extraHeaders,
+    };
     if (this.#transport.canSetCookieHeader) {
       const cookieHeader = this.#cookieHeader();
       if (cookieHeader !== undefined) headers['Cookie'] = cookieHeader;
@@ -369,6 +384,11 @@ export class WebUntisClient {
   /** Basis-URL ohne "/jsonrpc.do" — für REST-Aufrufe unter demselben Host/Proxy-Pfad. */
   #restBase(): string {
     return this.endpoint.replace(/\/jsonrpc\.do$/, '');
+  }
+
+  /** Siehe `WebUntisClientOptions.targetHost` — leeres Objekt, wenn kein Ziel-Host gesetzt ist. */
+  #targetHostHeader(): Record<string, string> {
+    return this.#targetHost === undefined ? {} : { 'X-WebUntis-Host': this.#targetHost };
   }
 
   /** Merkt sich die Session-Id aus einem authenticate-Result. */

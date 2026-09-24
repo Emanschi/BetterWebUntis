@@ -13,6 +13,7 @@ import { createMockState, handleRpc, type MockServerState } from '../rpcHandler'
 import { mockExamsRest } from '../examsRestMock';
 import { mockAbsencesRest } from '../absencesRestMock';
 import { MOCK_BEARER_AUTH_HEADER, MOCK_BEARER_TOKEN, mockCalendarEntryDetail, parseIsoLocalDateTime } from '../calendarEntryRestMock';
+import { mockSearchSchools } from '../schoolSearchMock';
 import type { MockElement } from '../timetable';
 
 function readSessionCookie(cookieHeader: string | null): string | undefined {
@@ -98,6 +99,25 @@ function calendarEntryDetailHandler(state: MockServerState) {
 }
 
 /**
+ * Simuliert die Schulsuche (siehe api/schoolSearchRest.ts) — braucht anders als alle
+ * anderen Handler hier keine Session, genau wie der echte Dienst (gemessen 2026-09-24,
+ * TESTING.md).
+ */
+function schoolSearchHandler() {
+  return http.post('*/WebUntis/schoolsearch', async ({ request }) => {
+    const raw: unknown = await request.json();
+    const body = (typeof raw === 'object' && raw !== null ? raw : {}) as { params?: unknown };
+    const firstParam = Array.isArray(body.params) ? body.params[0] : undefined;
+    const search =
+      typeof firstParam === 'object' && firstParam !== null && typeof (firstParam as { search?: unknown }).search === 'string'
+        ? (firstParam as { search: string }).search
+        : '';
+
+    return HttpResponse.json({ result: { size: 0, schools: mockSearchSchools(search) }, id: '1', jsonrpc: '2.0' });
+  });
+}
+
+/**
  * Baut die MSW-Handler. `state` kann von außen übergeben werden, damit ein Test seine
  * Session zwischen mehreren Requests behalten oder gezielt zurücksetzen kann.
  */
@@ -132,6 +152,7 @@ export function createMswHandlers(state: MockServerState = createMockState()) {
     dateRangeRestHandler('/WebUntis/api/classreg/absences/students', state, mockAbsencesRest, 'absences'),
     tokenNewHandler(state),
     calendarEntryDetailHandler(state),
+    schoolSearchHandler(),
   ];
 }
 

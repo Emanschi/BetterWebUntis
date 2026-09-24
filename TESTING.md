@@ -643,3 +643,46 @@ Wichtig sind stattdessen `teachingContent` (jetzt oben verifiziert) und das bere
 Lehrkräfte an dieser Schule kurze Hinweise wie "Test"/"MÜ" ein, siehe das schon gemessene
 Beispiel `info: "SMÜ Nomenklatur"` weiter oben in diesem Abschnitt. `notesAll`/`notesStaff`/
 `homeworks` werden bewusst NICHT in `RestCalendarEntryDetail` übernommen.
+
+### Schulsuche (`mobile.webuntis.com/ms/schoolquery2`) — verifiziert 2026-09-24 (siehe IDEEN.md B11)
+
+Für B11 (Produktions-Proxy soll jede Schule bedienen, nicht nur die eigene) musste erst
+geklärt werden, ob und wie sich ein Schulname überhaupt in den echten Server-Hostnamen
+auflösen lässt. Vom Nutzer selbst per curl geprüft (kein Login nötig, deshalb ohne
+Zugangsdaten messbar):
+
+```
+curl -s -X POST https://mobile.webuntis.com/ms/schoolquery2 -H "Content-Type: application/json" \
+  -d '{"id":"1","method":"searchSchool","params":[{"search":"pölten"}],"jsonrpc":"2.0"}'
+```
+
+**Antwort (gekürzt auf zwei von 18 Treffern):**
+
+```json
+{"result":{"size":0,"schools":[
+  {"server":"htlstp.webuntis.com","loginName":"htlstp","displayName":"HTBLUVA St.Pölten",
+   "address":"3101, St. Pölten, Waldstraße 3","schoolId":7053500,"tenantId":"7053500",
+   "serverUrl":"https://htlstp.webuntis.com/WebUntis/?school=htlstp",
+   "useMobileServiceUrlAndroid":false,"useMobileServiceUrlIos":false,"mobileServiceUrl":null},
+  {"server":"lbsstpoelten.webuntis.com","loginName":"lbsstpoelten","displayName":"LBS St.Pölten",
+   "address":"3100, St. Pölten, Hötzendorfstraße 8", "…": "…"}
+]},"id":"1","jsonrpc":"2.0"}
+```
+
+**Bestätigt:** `htlstp.webuntis.com`/`htlstp` (bekannte Werte, siehe Abschnitt 1) korrekt
+unter den Treffern — der Dienst löst Schulnamen zuverlässig auf echte Server auf. Eine Suche
+nach "pölten" allein lieferte 18 **verschiedene** Schulen (nicht nur HTBLuVA) quer über
+mehrere Schultypen in derselben Stadt — bestätigt, dass Name/Ort allein mehrdeutig sein
+können und eine Auswahlliste (nicht nur der erste Treffer) nötig ist.
+
+**Zwei Eigenheiten gemessen:**
+- `result.size` war `0`, obwohl `schools` 18 Einträge enthielt — unzuverlässig, in
+  `api/schoolSearchRest.ts` bewusst ignoriert (Array-Länge zählt).
+- `mobileServiceUrlAndroid`/`mobileServiceUrlIos`/`mobileServiceUrl` waren in jeder der 18
+  Zeilen `false`/`false`/`null`. Ob und was ein abweichender Wert bedeutet (vermutlich ein
+  alternativer Zugriffsweg für bestimmte Schulen), ist ungemessen — nicht unterstützt,
+  solche Schulen liefern aber weiterhin dieselben `server`/`loginName`-Felder wie jede
+  andere und funktionieren dadurch trotzdem.
+
+**Nicht gemessen:** ob derselbe Dienst für WebUntis-Schulen außerhalb Österreichs
+(andere Länder/Regionen) dasselbe Antwortformat liefert.

@@ -5,10 +5,13 @@ Code-Kommentare, Commit-Messages, Doku und UI-Texte alle auf Deutsch.
 
 ## Was das ist
 
-Modernere Alternative zur offiziellen WebUntis-App für **Schüler-Konten** der HTBLuVA
-St. Pölten (`htlstp.webuntis.com`, Schule `htlstp`). React 19 + TypeScript (strict) + Vite +
-Tailwind v4, später Capacitor für APK/iOS (M9, noch nicht gebaut). Reine Client-App, keine
-eigene Nutzerverwaltung, kein Backend außer einem geplanten dummen CORS-Proxy.
+Modernere Alternative zur offiziellen WebUntis-App für **Schüler-Konten**. Ursprünglich nur
+für die HTBLuVA St. Pölten (`htlstp.webuntis.com`, Schule `htlstp`) gebaut und dort auch
+gemessen/getestet — seit B11 (IDEEN.md) ist der Produktions-Proxy aber schulunabhängig, die
+App findet den richtigen Server über eine eingebaute Schulsuche (`api/schoolSearchRest.ts`).
+React 19 + TypeScript (strict) + Vite + Tailwind v4, später Capacitor für APK/iOS (M9, noch
+nicht gebaut). Reine Client-App, keine eigene Nutzerverwaltung, kein Backend außer einem
+zustandslosen CORS-Proxy (`deploy/`).
 
 Die drei Doku-Dateien sind der eigentliche Projektspeicher — **vor größeren Änderungen lesen
 und danach fortschreiben**:
@@ -27,7 +30,7 @@ und danach fortschreiben**:
 npm install        # node_modules fehlt im frischen Checkout
 ```
 ```bash
-npm test           # Vitest, Stand zuletzt: 259 Tests grün
+npm test           # Vitest, Stand zuletzt: 309 Tests grün
 ```
 ```bash
 npm run typecheck  # tsc --noEmit, strict + noUncheckedIndexedAccess + exactOptionalPropertyTypes
@@ -81,9 +84,10 @@ Proxy-Pfad hat schon einmal jeden echten Login zerstört (TESTING.md Abschnitt 3
 Betrifft `vite.config.ts` und `sessionStore.ts`.
 
 **Die Web-Version kann WebUntis nicht direkt aufrufen.** Kein
-`Access-Control-Allow-Credentials` → Proxy zwingend (Dev: Vite; Produktion: geplanter PHP-Proxy
-auf World4you, M11, **noch nicht gebaut** und deckt die `/WebUntis/api/*`-REST-Pfade laut
-Planung noch nicht ab). Capacitor ist nicht betroffen.
+`Access-Control-Allow-Credentials` → Proxy zwingend (Dev: Vite, fest auf eine Schule aus
+`VITE_WEBUNTIS_SERVER`; Produktion: `deploy/webuntis-proxy.php`, seit B11 schulunabhängig,
+deckt alle fünf API-Pfade plus die Schulsuche ab, siehe deploy/README.md). Capacitor ist
+nicht betroffen.
 
 **Das echte Schüler-Konto hat wenig Rechte** (gemessen, `mock/accounts.ts` spiegelt das 1:1):
 gesperrt sind `getTeachers`, `getStudents`, `getExamTypes`, `getExams`, `getSubstitutions`,
@@ -96,6 +100,7 @@ REST-Workarounds (IDEEN.md B3/B3b/B8):
 | Prüfungen | `GET /WebUntis/api/exams` | `api/examsRest.ts` |
 | Abwesenheiten | `GET /WebUntis/api/classreg/absences/students` | `api/absencesRest.ts` |
 | „Lehrstoff" | `GET /WebUntis/api/rest/view/v2/calendar-entry/detail` | `api/calendarEntryRest.ts` |
+| Schulsuche (Name/Ort → Server) | `POST /WebUntis/schoolsearch` (Proxy) → `mobile.webuntis.com/ms/schoolquery2` | `api/schoolSearchRest.ts` |
 
 Alle drei hat der Nutzer selbst aus den DevTools der Original-Oberfläche geliefert und
 ausdrücklich freigegeben. Ihr **Fehlerformat ist ungemessen** — nur grober HTTP-Status, kein
@@ -111,6 +116,25 @@ holen + wiederholen). Für jeden NEUEN undokumentierten Endpunkt unter `api/rest
 `getRestBearer()` probieren, nicht `getRest()` — sonst wiederholt sich dieser Bug. Mocks
 (`mock/calendarEntryRestMock.ts` `MOCK_BEARER_TOKEN`) prüfen den `Authorization`-Header
 absichtlich streng, damit ein versehentlicher Rückfall auf `getRest()` sofort im Test auffällt.
+
+**Produktions-Proxy kennt die Schule nicht mehr fest, sondern pro Request** (seit B11,
+IDEEN.md). Der Client schickt den Server-Hostname als Header `X-WebUntis-Host`
+(`WebUntisClientOptions.targetHost`, gesetzt über `createWebUntisClient({server, proxyBase})`)
+— `deploy/webuntis-proxy.php` validiert ihn streng gegen `*.webuntis.com`, bevor er
+weiterleitet (sonst offener Proxy, SSRF). Ein neuer undokumentierter Endpunkt unter
+`api/rest/**` muss deshalb an ZWEI Stellen ergänzt werden: `ALLOWED_PATHS` in
+`webuntis-proxy.php` UND (falls ein anderer Host als eine WebUntis-Schule gebraucht wird,
+wie bei der Schulsuche) als eigene feste Zone dort. Der Dev-Proxy (`vite.config.ts`)
+ignoriert diesen Header bewusst — er bleibt immer auf die eine in `VITE_WEBUNTIS_SERVER`
+konfigurierte Schule fest, siehe die nächste Zeile.
+
+**`vite.config.ts`-Fehler bei fehlendem `VITE_WEBUNTIS_SERVER` nur für `npm run dev`, nicht
+für `npm run mock`/`npm run smoke`/`npm run build`.** `vite-node` (beide erstgenannten
+Skripte) meldet intern denselben `command: "serve"` wie der echte Dev-Server — per
+`ctx.command` lassen sie sich NICHT unterscheiden (empirisch geprüft, siehe IDEEN.md B11).
+Die Unterscheidung läuft stattdessen über `process.env.npm_lifecycle_event === 'dev'`. Bei
+Änderungen an `vite.config.ts`: immer alle vier `npm run`-Befehle gegenprüfen, nicht nur
+`dev`/`build`.
 
 **`getTimetable` verlangt Start/Ende innerhalb EINES Schuljahres** (`-8507`, R10). Zeiträume
 immer über `getCurrentSchoolyear()`/`getSchoolyears()` klammern, nie ein festes ±N-Tage-Fenster.
@@ -155,8 +179,12 @@ der API-Doku; Fake-Daten halten sich an dieselben Formatregeln und werden von
 
 - **M9 Capacitor** (Android-Projekt + APK, iOS-Scaffold) — braucht JDK + Android SDK, beides
   nicht installiert.
-- **M11 ICS-Abo-Feed** + Produktions-Proxy auf World4you — Proxy muss dann auch
-  `/WebUntis/api/*` weiterleiten, nicht nur `jsonrpc.do`.
+- **M11 ICS-Abo-Feed** — eigener, zustandsloser Proxy (`deploy/webuntis-proxy.php`, seit
+  B11 schulunabhängig) deckt das NICHT ab: ein Abo-Feed bräuchte serverseitig gespeicherte
+  (verschlüsselte) Zugangsdaten, ein komplett getrennter, zustandsbehafteter Dienst
+  (siehe IDEEN.md B2).
+- `deploy/webuntis-proxy.php` in der aktuellen (B11-)Fassung wurde noch nicht gegen einen
+  echten Apache+PHP-Host deployt/getestet (kein `php -l` in dieser Umgebung verfügbar).
 - Offene Messfragen stehen als Checkliste in TESTING.md (u. a.: funktionieren die REST-Pfade
   auch über den Proxy gegen den echten Server; wie sieht eine *entschuldigte* Abwesenheit aus;
   liefert die Schule echte `foreColor`/`backColor`; was der ganztägige Eintrag bedeutet).

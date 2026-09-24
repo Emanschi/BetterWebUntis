@@ -61,6 +61,49 @@ describe('Request-Aufbau', () => {
   });
 });
 
+describe('targetHost — X-WebUntis-Host fuer den Produktions-Proxy (siehe IDEEN.md B11)', () => {
+  it('schickt X-WebUntis-Host mit, wenn gesetzt (jsonrpc.do)', async () => {
+    const transport = new StubTransport();
+    const client = new WebUntisClient({
+      endpoint: '/WebUntis/jsonrpc.do',
+      school: 'testschule',
+      client: 'T',
+      targetHost: 'htlstp.webuntis.com',
+      transport,
+    });
+    transport.queue('{"jsonrpc":"2.0","id":"bwu-1","result":[]}');
+
+    await client.call('getRooms');
+
+    expect(transport.requests[0]?.headers['X-WebUntis-Host']).toBe('htlstp.webuntis.com');
+  });
+
+  it('schickt X-WebUntis-Host auch bei REST-Aufrufen mit (getRest)', async () => {
+    const transport = new StubTransport();
+    const client = new WebUntisClient({
+      endpoint: '/WebUntis/jsonrpc.do',
+      school: 'testschule',
+      client: 'T',
+      targetHost: 'htlstp.webuntis.com',
+      transport,
+    });
+    transport.queue({ status: 200, body: '{"data":{}}' });
+
+    await client.getRest('/api/exams', { startDate: 1, endDate: 2 });
+
+    expect(transport.getRequests[0]?.headers['X-WebUntis-Host']).toBe('htlstp.webuntis.com');
+  });
+
+  it('laesst den Header komplett weg, wenn kein targetHost gesetzt ist (Dev-Proxy/nativ/Node)', async () => {
+    const { client, transport } = makeClient();
+    transport.queue('{"jsonrpc":"2.0","id":"bwu-1","result":[]}');
+
+    await client.call('getRooms');
+
+    expect(transport.requests[0]?.headers['X-WebUntis-Host']).toBeUndefined();
+  });
+});
+
 describe('Session und Cookies', () => {
   it('schickt nach dem Login JSESSIONID mit', async () => {
     const { client, transport } = makeClient();

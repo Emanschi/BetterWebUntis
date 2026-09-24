@@ -27,7 +27,11 @@ export const CLIENT_ID = 'BetterWebUntis';
 export interface CreateClientOptions {
   /** Schulname für `?school=`, z. B. "htlstp". */
   school: string;
-  /** Hostname des WebUntis-Servers, z. B. "htlstp.webuntis.com". Nur für direkte Zugriffe nötig. */
+  /**
+   * Hostname des WebUntis-Servers, z. B. "htlstp.webuntis.com". Pflicht für direkte
+   * Zugriffe (nativ/Node); im Proxy-Betrieb optional, aber nötig, damit der Produktions-
+   * Proxy weiß, an welche Schule er weiterleiten soll (siehe `WebUntisClientOptions.targetHost`).
+   */
   server?: string;
   /**
    * Proxy-Basispfad für den Browser, z. B. "/WebUntis" im Dev oder die World4you-URL
@@ -71,6 +75,10 @@ export function createWebUntisClient(options: CreateClientOptions): WebUntisClie
       ...base,
       endpoint: `${options.proxyBase.replace(/\/+$/, '')}/jsonrpc.do`,
       transport: new FetchTransport(),
+      // Sagt dem Produktions-Proxy, welche Schule gemeint ist (deploy/webuntis-proxy.php
+      // bedient beliebige Schulen, siehe IDEEN.md) -- ohne "server" bleibt der Dev-Proxy
+      // (vite.config.ts) zustaendig, der sein Ziel schon aus VITE_WEBUNTIS_SERVER kennt.
+      ...(options.server === undefined ? {} : { targetHost: options.server }),
     });
   }
 

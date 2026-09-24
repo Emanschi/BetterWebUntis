@@ -17,9 +17,12 @@ import { createMockState, handleRpc, type MockServerState } from './rpcHandler';
 import { mockExamsRest } from './examsRestMock';
 import { mockAbsencesRest } from './absencesRestMock';
 import { MOCK_BEARER_AUTH_HEADER, MOCK_BEARER_TOKEN, mockCalendarEntryDetail, parseIsoLocalDateTime } from './calendarEntryRestMock';
+import { mockSearchSchools } from './schoolSearchMock';
 import type { MockElement } from './timetable';
 
 const JSONRPC_PATH = '/WebUntis/jsonrpc.do';
+/** Siehe api/schoolSearchRest.ts — anders als die anderen Pfade hier kein Teil von WebUntis selbst, sondern nur unser eigener Proxy-Pfadname dafür. */
+const SCHOOL_SEARCH_PATH = '/WebUntis/schoolsearch';
 /**
  * Undokumentierte REST-Endpunkte (siehe api/examsRest.ts, api/absencesRest.ts,
  * api/calendarEntryRest.ts) — kein Teil der 2018er-Doku.
@@ -88,14 +91,18 @@ export function createMockHttpServer(state: MockServerState = createMockState())
       handleCalendarEntryDetailRest(state, req, url, res);
       return;
     }
+    if (req.method === 'POST' && path === SCHOOL_SEARCH_PATH) {
+      void handleSchoolSearch(req, res);
+      return;
+    }
 
     if (req.method !== 'POST' || path !== JSONRPC_PATH) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
           error:
-            `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH}, GET ${EXAMS_REST_PATH}, ` +
-            `GET ${ABSENCES_REST_PATH}, GET ${TOKEN_NEW_PATH} oder GET ${CALENDAR_ENTRY_DETAIL_PATH}`,
+            `Unbekannter Pfad: ${req.method} ${path}. Erwartet: POST ${JSONRPC_PATH}, POST ${SCHOOL_SEARCH_PATH}, ` +
+            `GET ${EXAMS_REST_PATH}, GET ${ABSENCES_REST_PATH}, GET ${TOKEN_NEW_PATH} oder GET ${CALENDAR_ENTRY_DETAIL_PATH}`,
         }),
       );
       return;
@@ -238,5 +245,35 @@ function handleCalendarEntryDetailRest(state: MockServerState, req: IncomingMess
   console.log(`  GET ${CALENDAR_ENTRY_DETAIL_PATH.padEnd(40)} OK — ${detail === undefined ? 'kein Treffer' : 'Treffer'}`);
 }
 
+/**
+ * Simuliert die Schulsuche (siehe api/schoolSearchRest.ts) — anders als alle anderen Pfade
+ * hier braucht dieser keine Session, genau wie der echte Dienst (gemessen 2026-09-24,
+ * TESTING.md).
+ */
+async function handleSchoolSearch(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const raw = await readBody(req);
+  let call: { params?: unknown };
+  try {
+    call = JSON.parse(raw);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'Parse error' } }));
+    return;
+  }
+
+  const firstParam = Array.isArray(call.params) ? call.params[0] : undefined;
+  const search =
+    typeof firstParam === 'object' && firstParam !== null && typeof (firstParam as { search?: unknown }).search === 'string'
+      ? (firstParam as { search: string }).search
+      : '';
+
+  const schools = mockSearchSchools(search);
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ result: { size: 0, schools }, id: '1', jsonrpc: '2.0' }));
+  // eslint-disable-next-line no-console -- Mock-Server-Log ist gewollt, kein Produktionscode.
+  console.log(`  POST ${SCHOOL_SEARCH_PATH.padEnd(40)} OK — ${schools.length} Treffer`);
+}
+
 export { createMockState, type MockServerState } from './rpcHandler';
-export { JSONRPC_PATH, EXAMS_REST_PATH, ABSENCES_REST_PATH, CALENDAR_ENTRY_DETAIL_PATH };
+export { JSONRPC_PATH, EXAMS_REST_PATH, ABSENCES_REST_PATH, CALENDAR_ENTRY_DETAIL_PATH, SCHOOL_SEARCH_PATH };
