@@ -60,6 +60,22 @@ function pxAtLeast(minutes: number, minPx: number): string {
   return `max(${px(minutes)}, ${minPx}px)`;
 }
 
+/**
+ * Sichtbarer Abstand zwischen zwei Perioden ohne Pause dazwischen (Nutzerwunsch 2026-09-24):
+ * ohne echte Pause stießen die Karten pixelgenau aneinander — der Rand allein (siehe
+ * TimetableBlockCard cardBorderColor) reichte nicht, wenn beide Karten aehnliche/gleiche
+ * Fachfarben hatten. Wird symmetrisch von oben/unten abgezogen (siehe blockTop()/blockHeight()).
+ */
+const BLOCK_GAP_PX = 3;
+
+function blockTop(minutes: number): string {
+  return `calc(${px(minutes)} + ${BLOCK_GAP_PX / 2}px)`;
+}
+
+function blockHeight(minutes: number, minPx: number): string {
+  return `calc(${pxAtLeast(minutes, minPx)} - ${BLOCK_GAP_PX}px)`;
+}
+
 /** Wie lange der Neon-Rahmen leuchtet, siehe index.css `.bwu-neon-highlight` (0.7s × 4 ≈ 2.8s Animation). */
 const HIGHLIGHT_DURATION_MS = 3200;
 
@@ -514,8 +530,8 @@ function DayGridColumn({
           </div>
         )}
         {day.blocks.map((block) => {
-          const top = px(wuTimeToMinutes(block.startTime) - bounds.startMinutes);
-          const height = pxAtLeast(wuTimeToMinutes(block.endTime) - wuTimeToMinutes(block.startTime), 30);
+          const top = blockTop(wuTimeToMinutes(block.startTime) - bounds.startMinutes);
+          const height = blockHeight(wuTimeToMinutes(block.endTime) - wuTimeToMinutes(block.startTime), 30);
           const key = block.periodIds.join('-');
           return (
             <div key={key} id={`bwu-block-${key}`} className="absolute inset-x-0.5" style={{ top, height }}>

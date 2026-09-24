@@ -642,6 +642,46 @@ wie vorher. Kein neuer automatisierter Test (reines CSS/Layout, keine neue Logik
 Minuten wie in den Mock-Daten) auf sehr kleinen/älteren Handys (<375px Breite) auswirkt —
 plausibel noch ohne Scrollen, aber nicht mit echten Daten dieser Länge getestet.
 
+### B14 — Eigenes Logo, Login-Hintergrundbild, Kartenabstand, Mobile-Bugjagd (Nutzerwunsch 2026-09-24)
+
+**Eigenes Logo statt des generischen Kachel-Icons aus B12.** Nutzer lieferte ein fertiges
+Icon (rotes/weißes "U"-Emblem auf Schwarz) als Datei. Ersetzt `public/icons/*` (192/512/
+apple-touch/favicon direkt aus der Quelle skaliert) sowie eine eigene, weiter
+herausgezoomte Variante für `icon-maskable-512.png` (Logo-Spitzen reichen sonst über die
+"sichere Zone", die runde adaptive Icons wegschneiden dürfen) — per ImageMagick erzeugt,
+`icon.svg`/die SVG-Favicon-Verknüpfung entfernt (Quelle ist jetzt ein Raster-Icon, kein
+Vektor mehr).
+
+**Login-Hintergrundbild:** zweite gelieferte Datei (Illustration, "BetterWebUntis" vs. das
+offizielle Untis-Icon) als `public/login-bg.webp`, per `background-image` +
+Verlaufs-Overlay (`rgba(0,0,0,.4)`→`.6`) hinter der (weiterhin blickdichten) Login-Card in
+`LoginScreen.tsx`. Bewusst unabhängig vom Light/Dark-Toggle (immer sichtbar) — die Karte
+selbst bleibt uneingeschränkt lesbar (`bg-surface` ist deckend), nur der Rand des
+Bildschirms zeigt das Bild.
+
+**Sichtbarer Abstand zwischen Stunden ohne Pause:** `TimetableScreen.tsx` bekam
+`blockTop()`/`blockHeight()` (ergänzen `px()`/`pxAtLeast()` aus B13 um einen festen
+`BLOCK_GAP_PX = 3`) — zwei zeitlich direkt aufeinanderfolgende Perioden berühren sich nicht
+mehr pixelgenau, unabhängig davon, ob ihre Fachfarben sich stark genug vom Rand abheben.
+
+**Mobile Bugjagd (375px, Browser-Tool):** ein echter Layout-Bug gefunden — `Button`
+(`ui/components/Button.tsx`) hatte weder `whitespace-nowrap` noch `shrink-0`, wodurch er
+sich in engen Flex-Zeilen zusammenquetschen und seinen eigenen Text umbrechen konnte
+(sichtbar bei "Als ICS exportieren" auf der Prüfungen-Seite: Text riss mitten im Wort um,
+statt dass die ganze Button-Gruppe sauber in die nächste Zeile rutscht). Fix gilt für JEDEN
+Button der App, nicht nur diese Stelle. Alle anderen Screens (Stundenplan Woche/Tag,
+Abwesenheiten, Einstellungen inkl. Farbauswahl, PeriodDetail-Modal, Klassenwechsel-Suche)
+systematisch per Skript auf echtes horizontales Überlaufen geprüft (`getBoundingClientRect()`
+gegen `window.innerWidth`, `overflow:hidden`-Vorfahren als Fehlalarm ausgefiltert) — sonst
+nichts gefunden. Wichtige Nebenerkenntnis: der Screenshot des Browser-Tools schneidet Inhalte
+nahe am rechten Bildschirmrand manchmal optisch ab, obwohl das echte DOM/Layout nicht
+überläuft — für Mobile-Layout-Prüfungen zählt die echte `getBoundingClientRect()`-Messung,
+nicht der erste Screenshot-Eindruck.
+
+Typecheck sauber, 309/309 Tests weiterhin grün (kein neuer Testfall — reine visuelle/
+Layout-Änderungen ohne neue Logik). Build inkl. neuer Assets manuell geprüft (`public/`
+kopiert alles unverändert in den Output).
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.

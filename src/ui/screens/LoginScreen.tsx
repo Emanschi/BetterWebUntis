@@ -101,7 +101,10 @@ export function LoginScreen() {
     schoolQuery.trim().length >= MIN_SEARCH_LENGTH;
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-bg p-6">
+    <div
+      className="flex min-h-dvh items-center justify-center bg-bg bg-cover bg-center p-6"
+      style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(/login-bg.webp)' }}
+    >
       <Card className="w-full max-w-sm">
         <h1 className="mb-1 text-xl font-semibold text-fg">BetterWebUntis</h1>
         <Attribution className="mb-3 block text-xs" />
