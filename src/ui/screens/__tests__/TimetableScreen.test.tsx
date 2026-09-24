@@ -212,19 +212,30 @@ describe('TimetableScreen', () => {
     expect(await screen.findByText(/Diskussionsthemen sammeln/)).toBeInTheDocument();
   });
 
-  it('zeigt ein Lehrstoff-Badge ("L") auf der Karte, BEVOR sie geöffnet wird (Nutzerwunsch 2026-09-24)', async () => {
-    // Bulk-Vorabladung fuer die ganze sichtbare Woche (TimetableScreen.tsx
-    // blocksWithTeachingContent) — dieselbe Fixture wie oben (Montags-Deutsch-Slot,
-    // mock/timetable.ts hasTeachingContent). Kein Klick noetig, das Badge muss von selbst
-    // erscheinen, sobald die Vorabladung durch ist.
+  it('zeigt das Lehrstoff-Badge ("L") erst NACH dem ersten Öffnen, bleibt danach sichtbar (Nutzerwunsch 2026-09-24, zweite Runde)', async () => {
+    // Erster Versuch war eine Vorabladung der ganzen sichtbaren Woche (~30 Aufrufe pro
+    // Ansicht) — auf Nutzerwunsch wieder verworfen (siehe IDEEN.md B10, Fortsetzung):
+    // `teachingContent` wird weiterhin nur beim tatsächlichen Öffnen geladen (wie B8
+    // urspruenglich vorsah), das Badge merkt sich das Ergebnis nur fuer die laufende Sitzung.
+    const user = userEvent.setup();
     await loginAsStudent();
     renderScreen();
     await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
 
+    // Vor dem Öffnen: kein Badge, obwohl die Karte (Montags-Deutsch-Slot,
+    // mock/timetable.ts hasTeachingContent) tatsächlich Lehrstoff hat.
+    const cards = await screen.findAllByRole('button', { name: /^D/ });
+    expect(within(cards[0]!).queryByRole('img', { name: 'Lehrstoff vorhanden' })).not.toBeInTheDocument();
+
+    await user.click(cards[0]!);
+    expect(await screen.findByText(/Diskussionsthemen sammeln/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Schließen' }));
+
+    // Nach dem Öffnen (und Schließen): Badge ist da, ohne erneuten Klick sichtbar.
     expect(await screen.findByRole('img', { name: 'Lehrstoff vorhanden' })).toBeInTheDocument();
   });
 
-  it('BUG (gemeldet 2026-09-24): zeigt KEIN Lehrstoff-Badge und KEINE leere "Lehrstoff"-Zeile bei einem Treffer ohne Lehrstoff', async () => {
+  it('BUG (gemeldet 2026-09-24): zeigt KEIN Lehrstoff-Badge und KEINE leere "Lehrstoff"-Zeile bei einem Treffer ohne Lehrstoff — auch nicht nach dem Öffnen', async () => {
     // Der Dienstag-BSP-Slot hat einen calendar-entry-detail-TREFFER (Buchungshinweis-Test
     // oben), aber keinen Lehrstoff — der Server sendet dafuer `teachingContent: null`, nicht
     // ein fehlendes Feld (siehe api/calendarEntryRest.ts). Vorher liess eine simple
@@ -235,10 +246,6 @@ describe('TimetableScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
 
-    // Wartet, bis die Vorabladung durch ist (am Lehrstoff-Badge der D-Karte erkennbar),
-    // damit auch die BSP-Karte ihre Antwort (teachingContent: null) sicher verarbeitet hat.
-    await screen.findByRole('img', { name: 'Lehrstoff vorhanden' });
-
     const bspCards = screen.getAllByRole('button', { name: /BSP/ });
     expect(within(bspCards[0]!).queryByRole('img', { name: 'Lehrstoff vorhanden' })).not.toBeInTheDocument();
 
@@ -248,6 +255,13 @@ describe('TimetableScreen', () => {
     // Zeile darf komplett fehlen (Row blendet bei fehlendem Wert aus), nicht mit leerem Inhalt
     // erscheinen.
     expect(screen.queryByText('Lehrstoff')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Schließen' }));
+
+    // Entscheidender Teil des Bugs: die Antwort (teachingContent: null) kam jetzt an — ohne
+    // hasRestText() haette der "L"-Badge-Effekt sie faelschlich als "vorhanden" gewertet.
+    expect(
+      within(screen.getAllByRole('button', { name: /BSP/ })[0]!).queryByRole('img', { name: 'Lehrstoff vorhanden' }),
+    ).not.toBeInTheDocument();
   });
 
   it('springt beim Klick auf "Stundenplan" in der Hauptnavigation zurück zur aktuellen Woche (Nutzerwunsch 2026-09-17)', async () => {

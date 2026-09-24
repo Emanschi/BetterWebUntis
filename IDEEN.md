@@ -379,6 +379,32 @@ aber kein Lehrstoff) zeigt jetzt korrekt GAR KEIN Badge mehr, vorher fälschlich
 "Lehrstoff"-Zeile; Info-Badges (Mittwoch/Montag-Vertretung/Freitag) weiterhin korrekt; keine
 Konsolenfehler im frischen Tab.
 
+**Fortsetzung, direkt im Anschluss (2026-09-24, zweite Runde) — Vorabladung wieder
+verworfen.** Nutzer-Feedback anhand eines Screenshots vom echten Konto (NW2, 18.09.2026,
+mit sowohl Zusatzinfo als auch Lehrstoff): die Vorabladung der ganzen Woche soll wieder raus
+— `teachingContent` soll wie ursprünglich in B8 vorgesehen NUR beim tatsächlichen Öffnen
+geladen werden, nicht mehr im Voraus für alle ~30 Perioden der Woche. Damit fällt der in
+dieser Runde zuerst genannte Netzwerk-Mehraufwand (bis zu ~30 zusätzliche Aufrufe pro
+Wochenansicht) wieder komplett weg — zurück auf exakt das B8-Aufrufvolumen (ein Aufruf je
+tatsächlich geöffneter Periode, nicht mehr).
+
+**Umgesetzt:** `TimetableScreen.tsx` — `useQueries`/`teachingContentBlocks`/
+`teachingContentResults` komplett entfernt. Stattdessen ein simpler `useState<Set<string>>`
+(`blocksWithTeachingContent`), den ein `useEffect` befüllt, sobald `calendarDetailQuery`
+(die ohnehin schon vorhandene Einzel-Abfrage fürs Öffnen) mit echtem Lehrstoff antwortet.
+Ergebnis: das "L"-Badge erscheint jetzt frühestens nach dem ersten Öffnen einer Periode,
+bleibt danach aber für den Rest der Sitzung sichtbar (kein erneutes Nachladen beim
+Wiederanschauen) — spiegelbildlich zum Info-Badge, das weiterhin sofort aus den ohnehin
+schon geladenen Stundenplan-Daten kommt, ohne eigenen Ladezustand.
+
+Zwei Tests entsprechend umgeschrieben (Badge-Test prüft jetzt "vorher nicht da, nach
+Öffnen+Schließen schon"; der BSP-Regressionstest prüft zusätzlich, dass das Badge auch NACH
+dem Öffnen nicht fälschlich auftaucht — genau dort hätte ein Wiederauftreten des `null`-Bugs
+in der neuen, schlankeren Fassung sichtbar werden müssen). Live gegen den Mock-Server erneut
+nachvollzogen (Light/Dark): Badge fehlt vor dem Öffnen, erscheint sogar schon während das
+Modal noch offen ist (React-Re-Render, kein Schließen nötig), bleibt danach bestehen; BSP
+bleibt nach dem Öffnen weiterhin ohne Badge.
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.
