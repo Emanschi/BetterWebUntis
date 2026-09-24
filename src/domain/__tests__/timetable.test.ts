@@ -129,12 +129,63 @@ describe('buildWeekGrid', () => {
     expect(grid[0]?.blocks).toHaveLength(2);
   });
 
-  it('behaelt info/substText/lstext/lstype im gemergten Block', () => {
+  it('behaelt info/substText/lstext/lstype bei einer einzelnen Periode', () => {
     const periods = [
       period({ id: 1, date: 20260907, startTime: 800, endTime: 850, code: 'cancelled', info: 'Grund', substText: 'Entfall' }),
     ];
     const grid = buildWeekGrid(periods, 20260907);
     expect(grid[0]?.blocks[0]).toMatchObject({ code: 'cancelled', info: 'Grund', substText: 'Entfall' });
+  });
+
+  it('BUG (gemeldet 2026-09-24): behaelt info, wenn nur die ZWEITE Haelfte einer Doppelstunde es traegt', () => {
+    const periods = [
+      period({ id: 1, date: 20260907, startTime: 800, endTime: 850 }), // kein info
+      period({ id: 2, date: 20260907, startTime: 855, endTime: 945, info: 'SMÜ Nomenklatur' }),
+    ];
+    const grid = buildWeekGrid(periods, 20260907);
+    expect(grid[0]?.blocks).toHaveLength(1);
+    expect(grid[0]?.blocks[0]).toMatchObject({ periodIds: [1, 2], info: 'SMÜ Nomenklatur' });
+  });
+
+  it('behaelt info, wenn nur die ERSTE Haelfte einer Doppelstunde es traegt', () => {
+    const periods = [
+      period({ id: 1, date: 20260907, startTime: 800, endTime: 850, info: 'Raumaenderung' }),
+      period({ id: 2, date: 20260907, startTime: 855, endTime: 945 }), // kein info
+    ];
+    const grid = buildWeekGrid(periods, 20260907);
+    expect(grid[0]?.blocks[0]).toMatchObject({ info: 'Raumaenderung' });
+  });
+
+  it('fuehrt unterschiedliche info-Texte beider Haelften sichtbar zusammen statt eine zu verwerfen', () => {
+    const periods = [
+      period({ id: 1, date: 20260907, startTime: 800, endTime: 850, info: 'Halle 2 reserviert' }),
+      period({ id: 2, date: 20260907, startTime: 855, endTime: 945, info: 'Geraete mitbringen' }),
+    ];
+    const grid = buildWeekGrid(periods, 20260907);
+    expect(grid[0]?.blocks[0]?.info).toBe('Halle 2 reserviert / Geraete mitbringen');
+  });
+
+  it('verdoppelt info nicht, wenn beide Haelften denselben Text tragen', () => {
+    const periods = [
+      period({ id: 1, date: 20260907, startTime: 800, endTime: 850, info: 'Dieselbe Info' }),
+      period({ id: 2, date: 20260907, startTime: 855, endTime: 945, info: 'Dieselbe Info' }),
+    ];
+    const grid = buildWeekGrid(periods, 20260907);
+    expect(grid[0]?.blocks[0]?.info).toBe('Dieselbe Info');
+  });
+
+  it('gilt genauso fuer substText/lstext/bkText/bkRemark, nicht nur info', () => {
+    const periods = [
+      period({ id: 1, date: 20260907, startTime: 800, endTime: 850, lstext: 'Hinweis 1', bkText: 'Buchung 1' }),
+      period({ id: 2, date: 20260907, startTime: 855, endTime: 945, substText: 'Vertretungstext', bkRemark: 'Vermerk' }),
+    ];
+    const grid = buildWeekGrid(periods, 20260907);
+    expect(grid[0]?.blocks[0]).toMatchObject({
+      lstext: 'Hinweis 1',
+      bookingText: 'Buchung 1',
+      substText: 'Vertretungstext',
+      bookingRemark: 'Vermerk',
+    });
   });
 
   it('sortiert ganztaegige Eintraege (>=10h) in allDayBlocks aus, nicht in blocks', () => {

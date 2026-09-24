@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSessionStore } from '../../state/sessionStore';
 import { api, restApi } from '../../api/index';
@@ -182,17 +182,76 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
       if (client === null || openBlock === null || personId === undefined || personType === undefined) {
         throw new Error('Keine aktive Sitzung.');
       }
-      return restApi.getCalendarEntryDetailRest(client, {
+      const result = await restApi.getCalendarEntryDetailRest(client, {
         elementId: personId,
         elementType: personType,
         startDateTime: wuDateTimeToIsoLocal(openBlock.date, openBlock.startTime),
         endDateTime: wuDateTimeToIsoLocal(openBlock.date, openBlock.endTime),
       });
+      // React Query verbietet `undefined` als Query-Ergebnis ("Query data cannot be
+      // undefined") — bei keinem Treffer liefert getCalendarEntryDetailRest() aber genau
+      // das (Doku-Kommentar dort: "gibt undefined, wenn kein Eintrag ... passt"). `null`
+      // ist der uebliche Ersatz-Sentinel dafuer. Das ist NICHT dasselbe `null` wie bei
+      // `.teachingContent` (das kann der Server selbst bei einem TREFFER ohne Lehrstoff
+      // liefern, siehe RestCalendarEntryDetail) — beide Faelle landen an den Leseseiten
+      // unten trotzdem gleich, weil `hasRestText()`/optional chaining beides als "kein
+      // Inhalt" behandeln.
+      return result ?? null;
     },
   });
 
   const grid = useMemo(() => buildWeekGrid(query.data ?? [], weekStart), [query.data, weekStart]);
   const weekDays = useMemo(() => grid.slice(0, 5), [grid]);
+
+  // "L"-Badge auf der Karte (Nutzerwunsch 2026-09-24): zeigt, ob eine Stunde Lehrstoff hat,
+  // OHNE sie erst zu öffnen — dafür muss `teachingContent` für die ganze sichtbare Woche
+  // vorab geladen werden, nicht erst pro Klick wie bisher (B8). Bewusste Abkehr von der
+  // damaligen Begründung "wie die Original-App, nur pro Klick" — der seit dem Bearer-Token-
+  // Fix (IDEEN.md B8 Fortsetzung) zuverlässige Endpunkt ist für eine ganze Woche schnell
+  // genug (im Smoke-Test gemessen: 34 Perioden in wenigen Sekunden). Dieselbe queryKey-Form
+  // wie `calendarDetailQuery` unten — ein späteres Öffnen einer schon vorab geladenen
+  // Periode trifft den Cache, es wird nicht doppelt angefragt. Nur für den eigenen Plan
+  // (wie schon bei `calendarDetailQuery`), Ganztagesblöcke ausgenommen (nie gemessen).
+  const teachingContentBlocks = useMemo(
+    () => (isForeignElement ? [] : weekDays.flatMap((day) => day.blocks)),
+    [weekDays, isForeignElement],
+  );
+  const teachingContentResults = useQueries({
+    queries: teachingContentBlocks.map((block) => ({
+      queryKey: ['calendarEntryDetail', personId, personType, block.date, block.startTime, block.endTime],
+      enabled: client !== null && personId !== undefined && personType !== undefined,
+      // Fehlerformat ungemessen (wie calendarDetailQuery) — kein Retry, damit ein einzelner
+      // Fehlschlag nicht die ganze Woche wiederholt nachfragt.
+      retry: false,
+      queryFn: async () => {
+        if (client === null || personId === undefined || personType === undefined) {
+          throw new Error('Keine aktive Sitzung.');
+        }
+        // Siehe Kommentar bei calendarDetailQuery weiter oben: React Query verbietet
+        // `undefined` als Query-Ergebnis, getCalendarEntryDetailRest() liefert das aber bei
+        // keinem Treffer (der Normalfall fuer die meisten Perioden einer Woche).
+        const result = await restApi.getCalendarEntryDetailRest(client, {
+          elementId: personId,
+          elementType: personType,
+          startDateTime: wuDateTimeToIsoLocal(block.date, block.startTime),
+          endDateTime: wuDateTimeToIsoLocal(block.date, block.endTime),
+        });
+        return result ?? null;
+      },
+    })),
+  });
+  const blocksWithTeachingContent = useMemo(() => {
+    const keys = new Set<string>();
+    teachingContentBlocks.forEach((block, index) => {
+      // hasRestText(), nicht "!== undefined": der Server sendet bei keinem Lehrstoff
+      // explizit `null`, nicht nur ein fehlendes Feld (siehe RestCalendarEntryDetail-
+      // Kommentar) — Bug, gemeldet 2026-09-24: "L"-Badge erschien trotzdem.
+      if (restApi.hasRestText(teachingContentResults[index]?.data?.teachingContent)) {
+        keys.add(block.periodIds.join('-'));
+      }
+    });
+    return keys;
+  }, [teachingContentBlocks, teachingContentResults]);
   const selectedDay = useMemo(() => grid.find((d) => d.date === selectedDate), [grid, selectedDate]);
   const visibleDays = viewMode === 'week' ? weekDays : selectedDay !== undefined ? [selectedDay] : [];
   const bounds = useMemo(() => computeTimeBounds(visibleDays), [visibleDays]);
@@ -227,6 +286,12 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
   function goNext(): void {
     setSelectedDate((d) => addWuDays(d, viewMode === 'week' ? 7 : 1));
   }
+
+  // hasRestText(), nicht direkt weiterreichen: siehe blocksWithTeachingContent oben — ohne
+  // die Normalisierung würde ein explizites `null` vom Server als leere "LEHRSTOFF"-Zeile in
+  // PeriodDetail landen statt dort ausgeblendet zu werden.
+  const rawTeachingContent = calendarDetailQuery.data?.teachingContent;
+  const detailTeachingContent = restApi.hasRestText(rawTeachingContent) ? rawTeachingContent : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -348,6 +413,7 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
                   onOpenBlock={setOpenBlock}
                   highlightActive={highlightActive}
                   highlightKey={highlightMatch}
+                  blocksWithTeachingContent={blocksWithTeachingContent}
                 />
               ))}
             </div>
@@ -357,7 +423,7 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
 
       {openBlock !== null && (
         <Modal title={blockTitle(openBlock)} onClose={() => setOpenBlock(null)}>
-          <PeriodDetail block={openBlock} teachingContent={calendarDetailQuery.data?.teachingContent} />
+          <PeriodDetail block={openBlock} teachingContent={detailTeachingContent} />
         </Modal>
       )}
     </div>
@@ -391,9 +457,19 @@ interface DayGridColumnProps {
   onOpenBlock: (block: TimetableBlock) => void;
   highlightActive: boolean;
   highlightKey: string | undefined;
+  /** Block-Keys (`periodIds.join('-')`) mit bereits vorab geladenem Lehrstoff — "L"-Badge. */
+  blocksWithTeachingContent: ReadonlySet<string>;
 }
 
-function DayGridColumn({ label, day, bounds, onOpenBlock, highlightActive, highlightKey }: DayGridColumnProps) {
+function DayGridColumn({
+  label,
+  day,
+  bounds,
+  onOpenBlock,
+  highlightActive,
+  highlightKey,
+  blocksWithTeachingContent,
+}: DayGridColumnProps) {
   const totalMinutes = bounds.endMinutes - bounds.startMinutes;
   return (
     <div className="flex min-w-0 flex-col">
@@ -422,7 +498,13 @@ function DayGridColumn({ label, day, bounds, onOpenBlock, highlightActive, highl
           const key = block.periodIds.join('-');
           return (
             <div key={key} id={`bwu-block-${key}`} className="absolute inset-x-0.5" style={{ top, height }}>
-              <TimetableBlockCard block={block} dense onOpen={onOpenBlock} highlighted={highlightActive && key === highlightKey} />
+              <TimetableBlockCard
+                block={block}
+                dense
+                onOpen={onOpenBlock}
+                highlighted={highlightActive && key === highlightKey}
+                hasTeachingContent={blocksWithTeachingContent.has(key)}
+              />
             </div>
           );
         })}

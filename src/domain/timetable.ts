@@ -143,6 +143,24 @@ function isSameLesson(a: TimetableBlock, b: TimetableBlock): boolean {
   );
 }
 
+/**
+ * Kombiniert ein Freitext-Feld zweier zu einer Doppelstunde verschmolzener Perioden, ohne
+ * Information zu verlieren: fehlt eines, wird das andere genommen; sind beide gleich, nur
+ * einmal; unterscheiden sie sich, werden beide sichtbar zusammengeführt statt eines
+ * stillschweigend zu verwerfen.
+ *
+ * Bug, gemeldet 2026-09-24: trug nur die ZWEITE Hälfte einer Doppelstunde ein `info` (oder
+ * `substText`/`lstext`/Buchungshinweis), ging es beim Merge bisher komplett verloren — nur
+ * `endTime`/`periodIds` wurden von der zweiten Periode übernommen, der Rest ihres Blocks
+ * wurde verworfen. Weder das Info-Badge noch die Detailansicht zeigten dann etwas an, obwohl
+ * die API es geliefert hatte.
+ */
+function mergeTextField(a: string | undefined, b: string | undefined): string | undefined {
+  if (a === undefined || a === '') return b;
+  if (b === undefined || b === '' || b === a) return a;
+  return `${a} / ${b}`;
+}
+
 /** Fasst direkt aufeinanderfolgende, inhaltlich identische Perioden zu einem Block zusammen. */
 function mergeConsecutive(periods: readonly Period[]): TimetableBlock[] {
   const sorted = [...periods].sort((a, b) => a.startTime - b.startTime);
@@ -153,6 +171,16 @@ function mergeConsecutive(periods: readonly Period[]): TimetableBlock[] {
     if (previous !== undefined && isSameLesson(previous, block)) {
       previous.endTime = block.endTime;
       previous.periodIds.push(...block.periodIds);
+      const info = mergeTextField(previous.info, block.info);
+      if (info !== undefined) previous.info = info;
+      const substText = mergeTextField(previous.substText, block.substText);
+      if (substText !== undefined) previous.substText = substText;
+      const lstext = mergeTextField(previous.lstext, block.lstext);
+      if (lstext !== undefined) previous.lstext = lstext;
+      const bookingText = mergeTextField(previous.bookingText, block.bookingText);
+      if (bookingText !== undefined) previous.bookingText = bookingText;
+      const bookingRemark = mergeTextField(previous.bookingRemark, block.bookingRemark);
+      if (bookingRemark !== undefined) previous.bookingRemark = bookingRemark;
     } else {
       blocks.push(block);
     }

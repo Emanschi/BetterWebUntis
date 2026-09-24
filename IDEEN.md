@@ -283,6 +283,102 @@ K201 wegen Sanierung gesperrt".
 Dieser Reverse-Engineering-Strang (B8, "Zusatzinformationen beim Öffnen einer Stunde") ist damit
 fertig.
 
+### B9 — Öffentliches README + erster GitHub-Release, ohne APK (Nutzerwunsch 2026-09-22)
+
+Nutzerwunsch: README für Besucher des öffentlichen GitHub-Repos umbauen (Features,
+Installationsweg statt internem Meilenstein-Log) und einen Release "am besten mit einer
+APK". README.md komplett neu geschrieben (Pitch, Feature-Liste, Schnellstart inkl.
+Mock-Server-Weg, ehrlicher "Bekannte Einschränkungen"-Abschnitt) — die bisherige
+Meilenstein-Tabelle bleibt vollständig in PLAN.md/TESTING.md, dort ist sie besser
+aufgehoben als auf der ersten Seite, die ein Fremder sieht.
+
+**APK zurückgestellt, mit Begründung.** Ein Android-Build ist M9 (PLAN.md) — noch nie
+gemacht, braucht JDK + Android SDK (mehrere GB, nicht installiert) und eine
+Signierentscheidung. Dem Nutzer die reale Größe des Vorhabens genannt und zur Wahl
+gestellt (voller Android-Setup jetzt / nur Source-Release / gar kein Release) —
+Entscheidung: **nur Source-Release jetzt**, M9 bleibt ein eigener, späterer Schritt.
+
+**Umgesetzt:** `v0.1.0` als GitHub-Pre-Release (`gh release create`, `--prerelease`,
+Ziel `main`), Release Notes decken sich inhaltlich mit der neuen README (Features,
+Installation, dieselben Einschränkungen, explizit vermerkt: "Dieser Release enthält kein
+Android/iOS-Paket"). Kein Anhang, rein Source-über-Tag.
+
+### B10 — Bug: Info verschwand bei Doppelstunden; neues "L"-Badge für Lehrstoff (Nutzerwunsch 2026-09-24)
+
+**Gemeldeter Bug: Info-Badge ("i") erschien nicht, obwohl `info` gesetzt war.** Ursache in
+`domain/timetable.ts` `mergeConsecutive()` gefunden: beim Zusammenfassen zweier Perioden zu
+einer Doppelstunde wurden von der ZWEITEN Periode nur `endTime`/`periodIds` übernommen —
+`info`/`substText`/`lstext`/`bkText`/`bkRemark` der zweiten Hälfte gingen komplett verloren,
+sobald die erste Hälfte sie nicht auch hatte. Betraf nicht nur das neue Badge, sondern auch
+die Detailansicht selbst — war vorher nur nie aufgefallen, weil kaum jemand für jede Stunde
+in die Detailansicht schaute. **Fix:** neue `mergeTextField()`-Hilfsfunktion — fehlt ein Wert,
+wird der andere genommen; unterscheiden sich beide, werden sie sichtbar zusammengeführt
+(`"A / B"`) statt einen stillschweigend zu verwerfen. 5 neue Tests in `timetable.test.ts`,
+inkl. exakt des gemeldeten Falls (nur zweite Hälfte trägt `info`).
+
+**Neu: "L"-Badge für Lehrstoff, analog zum Info-Badge.** Im selben Zug gewünscht: ein
+sichtbares "L" auf der Karte, wenn eine Stunde Lehrstoff (`teachingContent`, B8) hat — bisher
+gab es dafür gar keine Anzeige vor dem Öffnen. Technisch anspruchsvoller als das Info-Badge,
+weil `teachingContent` KEIN Feld von `TimetableBlock`/`getTimetable` ist, sondern ein
+separater REST-Aufruf pro Periode (`calendarEntryRest.ts`), der laut B8 bewusst nur beim
+Öffnen einer Periode lief ("wie die Original-App, nur pro Klick"), nicht vorab für die ganze
+Woche.
+
+**Bewusste Abkehr von dieser B8-Entscheidung:** `TimetableScreen.tsx` lädt `teachingContent`
+jetzt über `useQueries` (TanStack Query) für ALLE Perioden der sichtbaren Woche vorab, nicht
+mehr nur für die geöffnete. Vertretbar, weil der seit der Bearer-Token-Lösung (B8 Fortsetzung)
+zuverlässige Endpunkt für eine ganze Woche nachweislich schnell genug ist (Smoke-Test: 34
+Perioden in wenigen Sekunden). Dieselbe `queryKey`-Form wie der bestehende Einzel-Query
+(`calendarDetailQuery`) — ein Cache-Hit beim tatsächlichen Öffnen, keine doppelte Anfrage. Nur
+für den eigenen Plan (wie B8), Ganztagesblöcke ausgenommen.
+
+**Nebenfund beim Live-Test (Mock-Server): React-Query-Fehler "Query data cannot be
+undefined".** `getCalendarEntryDetailRest()` liefert bei keinem Treffer `undefined` — genau
+das verbietet React Query als Query-Ergebnis. Bestand vermutlich schon vorher beim
+Einzel-Query (jeder geöffneten Periode ohne Treffer), fiel aber nie auf, weil nur eine Anfrage
+gleichzeitig lief; durch die Vorabladung (bis zu ~30 gleichzeitige Anfragen ohne Treffer pro
+Woche) wurde es sofort sichtbar. Fix: beide Aufrufstellen wandeln `undefined` in `null` um
+(`result ?? null`), `teachingContent` bleibt darüber weiterhin über Optional-Chaining
+`undefined`, keine Leseseite musste sich ändern.
+
+**Zweite Fehlermeldung, direkt im Anschluss: "L"-Badge ohne Lehrstoff, leere
+"LEHRSTOFF"-Zeile in der Detailansicht (Screenshot des Nutzers, BESP/3BHIF, Mittwoch,
+Entfall).** Ursache gefunden: der Server sendet bei einem TREFFER ohne Lehrstoff
+offenbar `teachingContent: null` (nicht weggelassen, nicht leerer String) — dasselbe Muster,
+das B8 schon bei den Nachbarfeldern `notesAll`/`notesStaff` gemessen hatte. Eine simple
+`!== undefined`-Prüfung lässt `null` durch (`null !== undefined` ist `true` in JS), also
+wurde es fälschlich als "vorhanden" gewertet. Nicht direkt neu gemessen (der Nutzer hat kein
+Rohdaten-Beispiel geliefert), sondern aus dem Symptom rekonstruiert — passt aber exakt: eine
+leere Detail-Zeile UND ein falsches Badge sind genau das erwartete Verhalten, wenn `null`
+ungeprüft durchrutscht.
+
+**Fix:** `RestCalendarEntryDetail.teachingContent` ehrlich auf `string | null` typisiert
+(TypeScript hätte das vorher nicht angemeckert, weil der Typ `string | undefined` lag). Neue,
+exportierte `hasRestText()`-Hilfsfunktion (`api/calendarEntryRest.ts`) prüft explizit auf
+`undefined`, `null` UND `''` — beide Aufrufstellen in `TimetableScreen.tsx` (Badge-Berechnung
+und Detailansicht) nutzen sie jetzt statt einer eigenen `!== undefined`-Prüfung. Mock
+(`mock/calendarEntryRestMock.ts`) sendet bei einem Treffer ohne Lehrstoff jetzt ebenfalls
+bewusst `null` statt das Feld wegzulassen — vorher hätte der Mock diese Fehlerklasse nie über
+einen Test gefangen. 9 neue Tests: `hasRestText()` isoliert, `getCalendarEntryDetailRest()`
+reicht `null` unverändert durch (eigene Testdatei `calendarEntryRest.test.ts`), und ein
+Integrationstest gegen genau den gemeldeten Fall (Dienstag-BSP-Slot: Treffer, aber kein
+Lehrstoff → kein Badge, keine leere Zeile).
+
+**"Beide Badges gleichzeitig, wenn beides vorhanden ist"** war schon vorher der Fall — Info-
+und Lehrstoff-Badge sind zwei unabhängige, gleichrangige Geschwister-Elemente im Markup, kein
+Entweder-Oder. Kein aktueller Mock-Fixtermin kombiniert beides, aber ein Komponententest
+(`TimetableBlockCard.test.tsx`, aus der vorigen Runde) belegt es mit synthetischen Props.
+Vermutlich sah es beim Nutzer nur so aus, als würde sich das ausschließen, weil so viele
+Karten fälschlich "L" zeigten (derselbe Bug wie oben).
+
+**Manuell verifiziert** (Mock-Server, `mmuster`, Light **und** Dark Mode, frischer Browser-Tab
+gegen einen aufsummierten Konsolen-Puffer aus einem vorherigen Tab abgesichert): Montags-
+Deutsch-Karte zeigt "L" weiterhin korrekt schon vor dem Öffnen; Dienstags-BSP-Karte (Treffer,
+aber kein Lehrstoff) zeigt jetzt korrekt GAR KEIN Badge mehr, vorher fälschlich "L"; Klick
+öffnet weiterhin korrekt die Detailansicht mit vollem Lehrstoff-Text bzw. ohne
+"Lehrstoff"-Zeile; Info-Badges (Mittwoch/Montag-Vertretung/Freitag) weiterhin korrekt; keine
+Konsolenfehler im frischen Tab.
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.

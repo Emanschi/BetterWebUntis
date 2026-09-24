@@ -60,3 +60,21 @@ describe('TimetableBlockCard — Info-Badge', () => {
     expect(screen.getByText('Prüfung')).toBeInTheDocument();
   });
 });
+
+describe('TimetableBlockCard — Lehrstoff-Badge ("L")', () => {
+  it('zeigt KEIN L-Badge, wenn hasTeachingContent nicht gesetzt/false ist (Default)', () => {
+    render(<TimetableBlockCard block={makeBlock()} />);
+    expect(screen.queryByRole('img', { name: 'Lehrstoff vorhanden' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt ein L-Badge, wenn hasTeachingContent=true', () => {
+    render(<TimetableBlockCard block={makeBlock()} hasTeachingContent />);
+    expect(screen.getByRole('img', { name: 'Lehrstoff vorhanden' })).toBeInTheDocument();
+  });
+
+  it('Info- und Lehrstoff-Badge sind unabhaengig voneinander, beide gleichzeitig sichtbar', () => {
+    render(<TimetableBlockCard block={makeBlock({ info: 'SMÜ Nomenklatur' })} hasTeachingContent />);
+    expect(screen.getByRole('img', { name: 'Zusatzinfo vorhanden' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Lehrstoff vorhanden' })).toBeInTheDocument();
+  });
+});

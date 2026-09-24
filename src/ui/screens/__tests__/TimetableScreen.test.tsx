@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -210,6 +210,44 @@ describe('TimetableScreen', () => {
     await user.click(cards[0]!);
 
     expect(await screen.findByText(/Diskussionsthemen sammeln/)).toBeInTheDocument();
+  });
+
+  it('zeigt ein Lehrstoff-Badge ("L") auf der Karte, BEVOR sie geöffnet wird (Nutzerwunsch 2026-09-24)', async () => {
+    // Bulk-Vorabladung fuer die ganze sichtbare Woche (TimetableScreen.tsx
+    // blocksWithTeachingContent) — dieselbe Fixture wie oben (Montags-Deutsch-Slot,
+    // mock/timetable.ts hasTeachingContent). Kein Klick noetig, das Badge muss von selbst
+    // erscheinen, sobald die Vorabladung durch ist.
+    await loginAsStudent();
+    renderScreen();
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+
+    expect(await screen.findByRole('img', { name: 'Lehrstoff vorhanden' })).toBeInTheDocument();
+  });
+
+  it('BUG (gemeldet 2026-09-24): zeigt KEIN Lehrstoff-Badge und KEINE leere "Lehrstoff"-Zeile bei einem Treffer ohne Lehrstoff', async () => {
+    // Der Dienstag-BSP-Slot hat einen calendar-entry-detail-TREFFER (Buchungshinweis-Test
+    // oben), aber keinen Lehrstoff — der Server sendet dafuer `teachingContent: null`, nicht
+    // ein fehlendes Feld (siehe api/calendarEntryRest.ts). Vorher liess eine simple
+    // `!== undefined`-Pruefung `null` durchrutschen: das Badge erschien faelschlich, und die
+    // Detailansicht zeigte die Zeile "LEHRSTOFF" mit leerem Inhalt darunter.
+    const user = userEvent.setup();
+    await loginAsStudent();
+    renderScreen();
+    await waitFor(() => expect(screen.queryByText('Stundenplan wird geladen…')).not.toBeInTheDocument());
+
+    // Wartet, bis die Vorabladung durch ist (am Lehrstoff-Badge der D-Karte erkennbar),
+    // damit auch die BSP-Karte ihre Antwort (teachingContent: null) sicher verarbeitet hat.
+    await screen.findByRole('img', { name: 'Lehrstoff vorhanden' });
+
+    const bspCards = screen.getAllByRole('button', { name: /BSP/ });
+    expect(within(bspCards[0]!).queryByRole('img', { name: 'Lehrstoff vorhanden' })).not.toBeInTheDocument();
+
+    await user.click(bspCards[0]!);
+    expect(await screen.findByText('Halle 2 reserviert')).toBeInTheDocument(); // Detail ist offen
+    // "Lehrstoff" ist das Label aus PeriodDetail.tsx (CSS macht es nur optisch GROSS) — die
+    // Zeile darf komplett fehlen (Row blendet bei fehlendem Wert aus), nicht mit leerem Inhalt
+    // erscheinen.
+    expect(screen.queryByText('Lehrstoff')).not.toBeInTheDocument();
   });
 
   it('springt beim Klick auf "Stundenplan" in der Hauptnavigation zurück zur aktuellen Woche (Nutzerwunsch 2026-09-17)', async () => {

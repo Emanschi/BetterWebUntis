@@ -56,7 +56,25 @@ import type { PersonType } from './types';
 
 export interface RestCalendarEntryDetail {
   id: number;
-  teachingContent?: string;
+  /**
+   * Kann laut Server explizit `null` sein, nicht nur fehlen — gemessen (indirekt) 2026-09-24
+   * über einen Bug-Report: eine Periode ohne Lehrstoff bekam trotzdem das "L"-Badge, und die
+   * Detailansicht zeigte eine leere "LEHRSTOFF"-Zeile. Erklärt sich dadurch, dass eine simple
+   * `!== undefined`-Prüfung `null` durchlässt (`null !== undefined` ist `true` in JS) — genau
+   * dasselbe Muster, das die B8-Messung schon bei `notesAll`/`notesStaff` zeigte (dort auch
+   * `null`, nicht weggelassen). Konsumierende Stellen MÜSSEN `hasRestText()` unten nutzen,
+   * nicht direkt auf `!== undefined` prüfen.
+   */
+  teachingContent?: string | null;
+}
+
+/**
+ * Ist ein Freitext-Feld aus diesem Endpunkt tatsächlich vorhanden? Der Server sendet für ein
+ * leeres Feld explizit `null` (siehe Kommentar an `teachingContent` oben), nicht nur
+ * `undefined`/weggelassen — ein einfaches `!== undefined` reicht deshalb NICHT.
+ */
+export function hasRestText(value: string | null | undefined): value is string {
+  return value !== undefined && value !== null && value !== '';
 }
 
 interface RestCalendarEntryDetailResponse {

@@ -32,6 +32,14 @@ interface TimetableBlockCardProps {
    * Zeitgesteuertes An/Aus kommt von TimetableScreen.tsx, nicht von hier.
    */
   highlighted?: boolean;
+  /**
+   * "L"-Badge (Nutzerwunsch 2026-09-24, analog zum Info-Badge): zeigt an, dass für diese
+   * Stunde Lehrstoff hinterlegt ist. `teachingContent` selbst ist kein Feld von
+   * `TimetableBlock` (separater, erst vorab geladener REST-Aufruf, siehe
+   * TimetableScreen.tsx `blocksWithTeachingContent`) — deshalb ein eigenes Bool-Prop statt
+   * eines Blocks-Felds, wie beim `info`-Badge aber ohne den Volltext hier zu brauchen.
+   */
+  hasTeachingContent?: boolean;
 }
 
 /**
@@ -42,7 +50,13 @@ interface TimetableBlockCardProps {
  * Ein Klick öffnet die Detailansicht (`onOpen`), Entfall bleibt bewusst neutral/grau statt
  * farbig, damit "das findet nicht statt" auf den ersten Blick auffällt.
  */
-export function TimetableBlockCard({ block, dense = false, onOpen, highlighted = false }: TimetableBlockCardProps) {
+export function TimetableBlockCard({
+  block,
+  dense = false,
+  onOpen,
+  highlighted = false,
+  hasTeachingContent = false,
+}: TimetableBlockCardProps) {
   const override = useSubjectColorStore((s) => (block.subject?.id !== undefined ? s.overrides[block.subject.id] : undefined));
   const cancelled = block.code === 'cancelled';
   const irregular = block.code === 'irregular';
@@ -85,6 +99,16 @@ export function TimetableBlockCard({ block, dense = false, onOpen, highlighted =
               style={pillStyle}
             >
               i
+            </span>
+          )}
+          {hasTeachingContent && (
+            <span
+              role="img"
+              aria-label="Lehrstoff vorhanden"
+              className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] leading-none font-bold"
+              style={pillStyle}
+            >
+              L
             </span>
           )}
           {badgeLabel !== undefined && (

@@ -44,6 +44,11 @@ export function parseIsoLocalDateTime(iso: string): { date: WuDate; time: WuTime
  * Endpunkt (siehe api/calendarEntryRest.ts) gibt es bei keinem Treffer `undefined`, keinen
  * Fehler (z. B. bei einer im Stundenplan zusammengefassten Doppelstunde, deren UI-Grenzen
  * von der echten Einzelstunden-Zeitspanne abweichen).
+ *
+ * Bei einem TREFFER ohne Lehrstoff liefert der Mock jetzt bewusst `teachingContent: null`
+ * statt das Feld wegzulassen — genau das Verhalten, das den Bug vom 2026-09-24 verursacht
+ * hat (der Server sendet real `null`, nicht "fehlt"). Vorher ließ der Mock das Feld einfach
+ * weg und hätte diese Fehlerklasse nie über einen Test gefangen.
  */
 export function mockCalendarEntryDetail(
   element: MockElement,
@@ -53,5 +58,5 @@ export function mockCalendarEntryDetail(
 ): RestCalendarEntryDetail | undefined {
   const raw = rawPeriodsForElement(element, date, date).find((p) => p.startTime === startTime && p.endTime === endTime);
   if (raw === undefined) return undefined;
-  return { id: raw.id, ...(raw.teachingContent === undefined ? {} : { teachingContent: raw.teachingContent }) };
+  return { id: raw.id, teachingContent: raw.teachingContent ?? null };
 }
