@@ -41,8 +41,7 @@ cd BetterWebUntis
 npm install
 ```
 
-`.env` aus der Vorlage anlegen und auf die **eigene Schule** einstellen (die Vorlage
-zeigt standardmäßig auf die Testschule des Projekts, HTL St. Pölten):
+`.env` aus der Vorlage anlegen und auf die **eigene Schule** einstellen:
 
 ```bash
 cp .env.example .env
