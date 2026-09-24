@@ -682,6 +682,52 @@ Typecheck sauber, 309/309 Tests weiterhin grün (kein neuer Testfall — reine v
 Layout-Änderungen ohne neue Logik). Build inkl. neuer Assets manuell geprüft (`public/`
 kopiert alles unverändert in den Output).
 
+### B15 — "Angemeldet bleiben" (Opt-in-Session-Persistenz) (Nutzerwunsch 2026-09-24)
+
+**Löst den Backlog-Punkt "Session über Reload hinweg merken"** (war seit M4 offen, siehe
+altes TESTING.md/CLAUDE.md: "sicherste Grundeinstellung, nur nach expliziter Freigabe
+ändern"). Nutzerfrage vorab beantwortet, dann ausdrücklich freigegeben: **nicht** das
+Passwort oder die Session-ID selbst speichern (geht wegen `HttpOnly` auf `JSESSIONID`
+technisch ohnehin nicht — JS kann den Cookie-Wert gar nicht lesen), sondern nur die
+Identität, per Checkbox opt-in, dauerhaft bis zum manuellen Löschen (nicht nur
+tab-gebunden wie ursprünglich als Kompromiss erwogen).
+
+**Umgesetzt:**
+- `state/sessionStore.ts` — neuer `localStorage`-Schlüssel `bwu-remembered-session`
+  (`{username, personType, personId}`, NIE Passwort/Session-ID). `login()` bekam einen
+  vierten Parameter `remember: boolean` (Checkbox-Zustand); ohne Haekchen wird eine evtl.
+  vorher gemerkte Identität sogar aktiv gelöscht (jeder Login entscheidet neu, kein
+  "einmal angehakt, für immer"). Der Store startet beim Erzeugen optimistisch
+  `status: 'authenticated'`, wenn sowohl Schule als auch eine gemerkte Identität vorhanden
+  sind — ob das Browser-Cookie selbst noch gültig ist, kann erst ein echter API-Aufruf
+  zeigen, nicht der Store selbst.
+- Neue Aktion `sessionExpired()` — wie `logout()`, aber ohne (sinnlosen) Server-Logout-Aufruf
+  an eine schon ungültige Session, dafür mit der Meldung "Die Sitzung ist abgelaufen. Bitte
+  melde dich erneut an." und Löschen der gemerkten Identität.
+- `ui/App.tsx` — globaler `QueryCache`-`onError`-Handler: jede fehlgeschlagene Abfrage mit
+  `NOT_AUTHENTICATED` ruft `sessionExpired()`, egal auf welchem Screen. Zentral statt in
+  jedem Screen einzeln, weil eine abgelaufene Session immer die GANZE Sitzung betrifft
+  (ein Cookie, ein Server).
+- `ui/screens/LoginScreen.tsx` — Checkbox "Angemeldet bleiben, bis ich mich abmelde oder
+  Browserdaten lösche", **standardmäßig nicht angehakt** (bewusst opt-in, nicht opt-out).
+
+**Live end-to-end verifiziert** (Mock-Server, Browser-Tool): Login mit Haekchen →
+`bwu-remembered-session` enthält exakt `{username, personType, personId}`, kein Passwort,
+keine Session-ID → kompletter Seiten-Neuaufruf (nicht nur Client-Navigation) landet direkt
+im Stundenplan, kein erneuter Login nötig → Abmelden löscht den Eintrag wieder, ein
+folgender Neuaufruf landet wieder auf dem Login. **Wichtigster Fall separat geprüft:**
+Cookie manuell gelöscht (simuliert eine serverseitig abgelaufene Session), `localStorage`
+bewusst unangetastet gelassen → Neuaufruf zeigt kurz optimistisch die App, fällt dann sauber
+zurück auf den Login-Screen mit der Fehlermeldung, gemerkte Identität wird verworfen — kein
+Hängenbleiben in einem kaputten "angemeldet, aber nichts lädt"-Zustand.
+
+6 neue Tests in `sessionStore.test.ts` (Persistenz, Wiederherstellung, `sessionExpired()`,
+"kein Login ohne Haekchen vergisst eine alte Identität"), 3 neue in `LoginScreen.test.tsx`
+(Checkbox-Default, mit/ohne Haekchen). Kein Test für die `App.tsx`-Verdrahtung selbst
+(zwei Zeilen, auf bereits einzeln getestete Bausteine — `sessionExpired()`,
+`isNotAuthenticated()` — aufgesetzt; end-to-end live statt in einem neuen Integrationstest
+geprüft). Typecheck sauber, 318/318 Tests grün.
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.
@@ -700,8 +746,4 @@ kopiert alles unverändert in den Output).
 - **Feiertage/Ferien** (`getHolidays`) im Stundenplan als Ganztagsblöcke.
 - **Export des ganzen Stundenplans** als ICS, nicht nur der Prüfungen.
 - **Mehrere Profile** (z. B. eigener Plan + Lieblingsklasse) mit schnellem Wechsel.
-- **Session über Reload hinweg merken** (M4): aktuell rein im Speicher, ein Reload meldet ab
-  (sicherste Grundeinstellung, siehe TESTING.md M4). Eine Wiederherstellung über
-  `sessionStorage` (tab-gebunden, beim Schließen weg) wäre ein vertretbarer Kompromiss
-  zwischen Komfort und Sicherheit — nur nach expliziter Freigabe umsetzen.
 - **PWA-Installation + Push** für Vertretungen (Push braucht wieder einen Server → siehe B2).

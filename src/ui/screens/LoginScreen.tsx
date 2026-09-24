@@ -29,6 +29,7 @@ export function LoginScreen() {
   const [showSelectSchoolHint, setShowSelectSchoolHint] = useState(false);
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
 
   useEffect(() => {
     if (status === 'authenticated') navigate('/timetable', { replace: true });
@@ -89,7 +90,7 @@ export function LoginScreen() {
       setShowSelectSchoolHint(true);
       return;
     }
-    void login(selectedSchool, user, password);
+    void login(selectedSchool, user, password, remember);
   }
 
   const authenticating = status === 'authenticating';
@@ -165,6 +166,16 @@ export function LoginScreen() {
             autoComplete="current-password"
             required
           />
+
+          <label className="flex items-center gap-2 text-sm text-fg-muted">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="h-4 w-4 rounded border-border accent-accent"
+            />
+            Angemeldet bleiben, bis ich mich abmelde oder Browserdaten lösche
+          </label>
 
           {showSelectSchoolHint && (
             <p role="alert" className="text-sm text-danger">

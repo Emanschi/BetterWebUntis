@@ -21,6 +21,7 @@ afterEach(() => {
     errorMessage: undefined,
     client: null,
   });
+  localStorage.clear();
 });
 
 function renderLogin() {
@@ -105,5 +106,41 @@ describe('LoginScreen', () => {
 
     await waitFor(() => expect(useSessionStore.getState().status).toBe('authenticated'));
     expect(useSessionStore.getState().personId).toBe(501);
+  });
+
+  describe('"Angemeldet bleiben"-Checkbox', () => {
+    it('ist standardmaessig nicht angehakt', () => {
+      renderLogin();
+      expect(screen.getByRole('checkbox', { name: /Angemeldet bleiben/ })).not.toBeChecked();
+    });
+
+    it('ohne Haekchen wird nichts in localStorage gemerkt', async () => {
+      const user = userEvent.setup();
+      renderLogin();
+
+      await selectSchool(user, 'Mock-HTL', 'Mock-HTL');
+      await user.type(screen.getByLabelText('Benutzername'), 'mmuster');
+      await user.type(screen.getByLabelText('Passwort'), 'test1234');
+      await user.click(screen.getByRole('button', { name: 'Anmelden' }));
+
+      await waitFor(() => expect(useSessionStore.getState().status).toBe('authenticated'));
+      expect(localStorage.getItem('bwu-remembered-session')).toBeNull();
+    });
+
+    it('mit Haekchen wird die Identitaet in localStorage gemerkt', async () => {
+      const user = userEvent.setup();
+      renderLogin();
+
+      await selectSchool(user, 'Mock-HTL', 'Mock-HTL');
+      await user.type(screen.getByLabelText('Benutzername'), 'mmuster');
+      await user.type(screen.getByLabelText('Passwort'), 'test1234');
+      await user.click(screen.getByRole('checkbox', { name: /Angemeldet bleiben/ }));
+      await user.click(screen.getByRole('button', { name: 'Anmelden' }));
+
+      await waitFor(() => expect(useSessionStore.getState().status).toBe('authenticated'));
+      const raw = localStorage.getItem('bwu-remembered-session');
+      expect(raw).not.toBeNull();
+      expect(JSON.parse(raw ?? '{}')).toEqual({ username: 'mmuster', personType: 5, personId: 501 });
+    });
   });
 });

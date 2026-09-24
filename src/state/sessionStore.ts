@@ -1,18 +1,24 @@
 /**
  * Verwaltet die WebUntis-Session als React-State.
  *
- * Bewusste Sicherheitsentscheidung (Projektauftrag Abschnitt "Keine eigene
- * Nutzerverwaltung"): Die Session lebt **ausschließlich im Speicher**. Weder Passwort
- * noch sessionId werden in localStorage/sessionStorage persistiert — nach einem
- * Seiten-Reload ist man abgemeldet und muss sich neu einloggen. Das ist die sicherste
- * Grundeinstellung ("nicht im Klartext persistieren, wo vermeidbar"); eine spätere,
- * bewusst abgewogene Persistenz (z. B. sessionId in sessionStorage, tab-gebunden) ist
- * eine offene Idee, siehe IDEEN.md.
+ * Ursprüngliche, bewusste Sicherheitsentscheidung: die Session lebt ausschließlich im
+ * Speicher, ein Reload meldet ab. Seit B15 (Nutzerwunsch, IDEEN.md) ist das jetzt OPT-IN
+ * änderbar: "Angemeldet bleiben" beim Login (siehe LoginScreen.tsx) merkt sich die Identität
+ * (Nutzername, PersonType, PersonId — siehe `RememberedSession`) in `localStorage`, bis
+ * `bleibt bis man löscht`. **Nicht** gespeichert (geht wegen `HttpOnly` auch technisch gar
+ * nicht): Passwort oder die WebUntis-Session-ID selbst — die eigentliche Authentifizierung
+ * läuft weiterhin ausschließlich über das `JSESSIONID`-Cookie, das der Browser selbst hält.
+ * Ohne Häkchen bleibt es beim alten Verhalten (Reload = abgemeldet).
  *
- * Nur die aufgelöste Schule wird gemerkt (unproblematisch, kein Geheimnis) — Komfort für
- * den nächsten Login, siehe `SCHOOL_STORAGE_KEY`. Seit der Schulsuche (IDEEN.md) ist das
- * ein Objekt inkl. Server-Hostname, nicht mehr nur ein Name — ein Login braucht seither
- * beides (siehe `StoredSchool`, `defaultBuildClient`).
+ * Ist eine gemerkte Identität vorhanden, startet der Store optimistisch als
+ * "authenticated" — ob das Cookie noch gültig ist, entscheidet sich am ersten echten
+ * API-Aufruf. Schlägt der fehl (`NOT_AUTHENTICATED`), fängt `App.tsx`s globaler
+ * QueryCache-Handler das ab und ruft `sessionExpired()`.
+ *
+ * Nur die aufgelöste Schule wird IMMER gemerkt (unproblematisch, kein Geheimnis, auch ohne
+ * "Angemeldet bleiben") — Komfort für den nächsten Login, siehe `SCHOOL_STORAGE_KEY`. Seit
+ * der Schulsuche (IDEEN.md) ist das ein Objekt inkl. Server-Hostname, nicht mehr nur ein
+ * Name — ein Login braucht seither beides (siehe `StoredSchool`, `defaultBuildClient`).
  */
 
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
@@ -62,6 +68,59 @@ function writeStoredSchool(school: StoredSchool): void {
   }
 }
 
+/**
+ * Nur die Identität, NIE das Passwort oder die Session-ID selbst (siehe Datei-Kommentar
+ * oben) — genug, um die UI nach einem Reload sofort wieder als "angemeldet" zu zeigen, ohne
+ * dass irgendwo ein Geheimnis liegt.
+ */
+interface RememberedSession {
+  username: string;
+  personType: PersonType;
+  personId: number;
+}
+
+const REMEMBERED_SESSION_STORAGE_KEY = 'bwu-remembered-session';
+
+function isRememberedSession(value: unknown): value is RememberedSession {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as RememberedSession).username === 'string' &&
+    typeof (value as RememberedSession).personType === 'number' &&
+    typeof (value as RememberedSession).personId === 'number'
+  );
+}
+
+function readRememberedSession(): RememberedSession | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(REMEMBERED_SESSION_STORAGE_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isRememberedSession(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeRememberedSession(session: RememberedSession): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(REMEMBERED_SESSION_STORAGE_KEY, JSON.stringify(session));
+    }
+  } catch {
+    // nicht kritisch
+  }
+}
+
+function clearRememberedSession(): void {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY);
+  } catch {
+    // nicht kritisch
+  }
+}
+
 export interface SessionState {
   status: SessionStatus;
   school: StoredSchool | null;
@@ -72,8 +131,19 @@ export interface SessionState {
   errorMessage?: string | undefined;
   /** Der aktive Client, sobald angemeldet — für alle weiteren API-Aufrufe der Screens. */
   client: WebUntisClient | null;
-  login: (school: StoredSchool, user: string, password: string) => Promise<void>;
+  /**
+   * `remember`: Identität (nicht Passwort/Session-ID, siehe Datei-Kommentar) dauerhaft in
+   * localStorage merken, damit ein Reload/Neustart des Browsers nicht erneut zum Login
+   * zwingt — opt-in, siehe Checkbox in LoginScreen.tsx.
+   */
+  login: (school: StoredSchool, user: string, password: string, remember: boolean) => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * Server hat eine laufende Anfrage mit "nicht angemeldet" abgelehnt (abgelaufene/ungültige
+   * Session) — anders als `logout()` OHNE erneuten Logout-Aufruf an den (schon ungültigen)
+   * Server, dafür mit Fehlermeldung. Aufgerufen vom globalen QueryCache-Handler, App.tsx.
+   */
+  sessionExpired: () => void;
 }
 
 export interface CreateSessionStoreOptions {
@@ -99,17 +169,34 @@ export function createSessionStore(
 ): UseBoundStore<StoreApi<SessionState>> {
   const buildClient = options.buildClient ?? defaultBuildClient;
 
-  return create<SessionState>((set, get) => ({
-    status: 'idle',
-    school: readStoredSchool(),
-    client: null,
+  const rememberedSchool = readStoredSchool();
+  const rememberedSession = readRememberedSession();
+  // Optimistischer Neustart: nur wenn BEIDES da ist (Schule UND gemerkte Identität) — ob
+  // das Browser-Cookie selbst noch gültig ist, kann erst ein echter API-Aufruf zeigen (siehe
+  // sessionExpired()). Ein rein lokal "authenticated" ohne funktionierende Session korrigiert
+  // sich dadurch spätestens beim ersten Bildschirm von selbst, statt UI dauerhaft falsch zu zeigen.
+  const canRestore = rememberedSchool !== null && rememberedSession !== null;
 
-    async login(school, user, password) {
+  return create<SessionState>((set, get) => ({
+    status: canRestore ? 'authenticated' : 'idle',
+    school: rememberedSchool,
+    client: canRestore ? buildClient(rememberedSchool) : null,
+    username: rememberedSession?.username,
+    personType: rememberedSession?.personType,
+    personId: rememberedSession?.personId,
+
+    async login(school, user, password, remember) {
       set({ status: 'authenticating', school, errorMessage: undefined });
       writeStoredSchool(school);
       const client = buildClient(school);
       try {
         const result = await api.authenticate(client, { user, password });
+        if (remember) {
+          writeRememberedSession({ username: user, personType: result.personType, personId: result.personId });
+        } else {
+          // Ein vorheriges Haekchen gilt nicht automatisch weiter -- jeder Login entscheidet neu.
+          clearRememberedSession();
+        }
         set({
           status: 'authenticated',
           client,
@@ -125,6 +212,7 @@ export function createSessionStore(
 
     async logout() {
       const { client } = get();
+      clearRememberedSession();
       if (client !== null) {
         try {
           await api.logout(client);
@@ -139,6 +227,18 @@ export function createSessionStore(
         personType: undefined,
         personId: undefined,
         errorMessage: undefined,
+      });
+    },
+
+    sessionExpired() {
+      clearRememberedSession();
+      set({
+        status: 'error',
+        client: null,
+        username: undefined,
+        personType: undefined,
+        personId: undefined,
+        errorMessage: 'Die Sitzung ist abgelaufen. Bitte melde dich erneut an.',
       });
     },
   }));

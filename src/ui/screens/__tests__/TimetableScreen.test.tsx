@@ -52,7 +52,7 @@ async function loginAsStudent() {
   });
   await testStore
     .getState()
-    .login({ server: 'mock.local', loginName: 'mockschule', displayName: 'Mock-HTL' }, 'mmuster', 'test1234');
+    .login({ server: 'mock.local', loginName: 'mockschule', displayName: 'Mock-HTL' }, 'mmuster', 'test1234', false);
   useSessionStore.setState(testStore.getState());
 }
 

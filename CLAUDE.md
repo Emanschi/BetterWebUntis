@@ -30,7 +30,7 @@ und danach fortschreiben**:
 npm install        # node_modules fehlt im frischen Checkout
 ```
 ```bash
-npm test           # Vitest, Stand zuletzt: 309 Tests grün
+npm test           # Vitest, Stand zuletzt: 318 Tests grün
 ```
 ```bash
 npm run typecheck  # tsc --noEmit, strict + noUncheckedIndexedAccess + exactOptionalPropertyTypes
@@ -58,7 +58,8 @@ src/api/      JSON-RPC-Layer: types.ts (1:1 aus der Doku) · transport.ts (fetch
               Endpunkte, gebündelt unter dem eigenen Namensraum `restApi` (restApi.ts)
 src/domain/   reine Funktionen: timetable.ts (Wochenraster, Doppelstunden-Merge, Zeitachse),
               colors.ts (Fachfarbe + WCAG-Kontrast), ics.ts (RFC 5545), schoolyear.ts
-src/state/    Zustand-Stores: sessionStore (nur im Speicher!), themeStore, subjectColorStore
+src/state/    Zustand-Stores: sessionStore (im Speicher, optional "Angemeldet bleiben"
+              siehe unten), themeStore, subjectColorStore
 src/ui/       AppShell, router.tsx (HashRouter), screens/, components/
 src/mock/     Mock-Server + Fake-Schule „Mock-HTL"; rpcHandler.ts wird von server.ts (Node)
               UND msw/handlers.ts (Tests) geteilt — eine Fachlogik, zwei Transporte
@@ -163,9 +164,15 @@ Ob dieselbe Regel für andere Methoden gilt, ist ungemessen — also nicht anneh
 Doku. `domain/timetable.ts` trennt sie ab 10 h Dauer nach `allDayBlocks`, sonst zerreißt es die
 Zeitachse.
 
-**Session lebt nur im Speicher.** Kein Passwort, keine sessionId in localStorage/sessionStorage;
-Reload = abgemeldet. Bewusste Sicherheitsentscheidung, nur nach expliziter Freigabe ändern.
-Persistiert werden nur Schulname, Theme und Fachfarben.
+**Session lebt standardmäßig nur im Speicher, seit B15 (IDEEN.md) mit Opt-in-Ausnahme.**
+Ohne "Angemeldet bleiben" beim Login: Reload = abgemeldet, wie ursprünglich. Mit Häkchen:
+`sessionStore.ts` merkt Nutzername/PersonType/PersonId (NIE Passwort oder Session-ID —
+Letztere ist `HttpOnly`, JS kann sie technisch gar nicht lesen) in `localStorage` und startet
+beim nächsten Laden optimistisch als angemeldet; ob das Browser-Cookie noch gilt, zeigt der
+erste echte API-Aufruf. Schlägt der mit `NOT_AUTHENTICATED` fehl, fängt `App.tsx`s globaler
+`QueryCache`-`onError`-Handler das ab (`sessionExpired()`) — Rückfall zum Login mit Meldung,
+gemerkte Identität wird verworfen. Persistiert werden immer schon Schulname, Theme und
+Fachfarben, unabhängig von diesem Häkchen.
 
 ## Tests
 

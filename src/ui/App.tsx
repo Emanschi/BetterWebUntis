@@ -1,10 +1,21 @@
 import { useState } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { isBadCredentials, isMissingRight, isNotAuthenticated } from '../api/errors';
+import { useSessionStore } from '../state/sessionStore';
 import { AppRouter } from './router';
 
 function createQueryClient(): QueryClient {
   return new QueryClient({
+    // Betrifft vor allem die per "Angemeldet bleiben" (sessionStore.ts) wiederhergestellte
+    // Sitzung: ob das Browser-Cookie noch gueltig ist, zeigt sich erst am ersten echten
+    // API-Aufruf. Schlaegt IRGENDEINE Query mit "nicht angemeldet" fehl, gilt das fuer die
+    // ganze Sitzung (ein Cookie, ein Server) -- zentral hier statt in jedem Screen einzeln
+    // auf sessionExpired() reagieren.
+    queryCache: new QueryCache({
+      onError: (error) => {
+        if (isNotAuthenticated(error)) useSessionStore.getState().sessionExpired();
+      },
+    }),
     defaultOptions: {
       queries: {
         // WebUntis drosselt bei Lastspitzen (PLAN.md R7) — nicht bei jedem Fokuswechsel neu laden.
