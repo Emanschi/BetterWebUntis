@@ -65,6 +65,36 @@ function validateTargetHost(string $host): bool
     return (bool) preg_match('/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.webuntis\.com$/', $host);
 }
 
+/**
+ * Liest den Authorization-Header des eingehenden Requests, so robust wie möglich: Apache
+ * reicht diesen Header je nach Server-/PHP-Konfiguration NICHT immer in
+ * $_SERVER['HTTP_AUTHORIZATION'] durch (bekannte, hostabhängige Eigenheit, nicht
+ * WebUntis-spezifisch). Mehrere Quellen der Reihe nach probieren, keine bevorzugte
+ * Konfiguration voraussetzen.
+ */
+function incomingAuthorizationHeader(): ?string
+{
+    if (isset($_SERVER['HTTP_AUTHORIZATION']) && $_SERVER['HTTP_AUTHORIZATION'] !== '') {
+        return $_SERVER['HTTP_AUTHORIZATION'];
+    }
+    // Bei einem internen Rewrite (siehe .htaccess) legt Apache manche Header stattdessen
+    // hier ab.
+    if (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION']) && $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] !== '') {
+        return $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+    }
+    foreach (['apache_request_headers', 'getallheaders'] as $fn) {
+        if (!function_exists($fn)) {
+            continue;
+        }
+        foreach ($fn() as $name => $value) {
+            if (strtolower($name) === 'authorization' && $value !== '') {
+                return $value;
+            }
+        }
+    }
+    return null;
+}
+
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
 $queryString = $_SERVER['QUERY_STRING'] ?? '';
 
@@ -110,6 +140,15 @@ if (isset($_SERVER['HTTP_COOKIE'])) {
 }
 if ($method === 'POST') {
     $forwardHeaders[] = 'Content-Type: ' . ($_SERVER['CONTENT_TYPE'] ?? 'application/json');
+}
+// Bearer-Token fuer calendar-entry/detail (siehe api/client.ts getRestBearer()) — OHNE das
+// hier landet jeder Aufruf ohne gueltigen Token beim echten Server und bekommt HTTP 404
+// (Bug bis einschl. v1.2.0: dieser Header wurde komplett vergessen, siehe IDEEN.md).
+// Mehrere Fallbacks, weil Apache den Authorization-Header PHP oft gar nicht erst
+// durchreicht -- .htaccess erzwingt HTTP_AUTHORIZATION zusaetzlich per RewriteRule.
+$incomingAuth = incomingAuthorizationHeader();
+if ($incomingAuth !== null) {
+    $forwardHeaders[] = 'Authorization: ' . $incomingAuth;
 }
 
 $ch = curl_init($targetUrl);

@@ -7,4 +7,11 @@
 # webuntis-proxy.php (siehe deploy/README.md).
 
 RewriteEngine On
+
+# Apache reicht den Authorization-Header (Bearer-Token fuer calendar-entry/detail, siehe
+# webuntis-proxy.php) an PHP oft NICHT automatisch durch -- bekannte Apache-Eigenheit,
+# unabhaengig von diesem Projekt. Diese Zeile zwingt ihn in $_SERVER['HTTP_AUTHORIZATION'].
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%1]
+
 RewriteRule ^WebUntis/.*$ webuntis-proxy.php [L,QSA]

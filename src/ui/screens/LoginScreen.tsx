@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSessionStore, type StoredSchool } from '../../state/sessionStore';
 import { restApi } from '../../api/index';
 import type { SchoolSearchResult } from '../../api/schoolSearchRest';
+import { Attribution } from '../components/Attribution';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Spinner } from '../components/Spinner';
@@ -103,6 +104,7 @@ export function LoginScreen() {
     <div className="flex min-h-dvh items-center justify-center bg-bg p-6">
       <Card className="w-full max-w-sm">
         <h1 className="mb-1 text-xl font-semibold text-fg">BetterWebUntis</h1>
+        <Attribution className="mb-3 block text-xs" />
         <p className="mb-6 text-sm text-fg-muted">Melde dich mit deinem WebUntis-Konto an.</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>

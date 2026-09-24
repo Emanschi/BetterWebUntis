@@ -80,6 +80,13 @@ Kein `node_modules`, kein Quellcode, keine `.env` — nur diese vier/fünf Datei
   zu `mobile.webuntis.com` (WebUntis' eigener Suchdienst, siehe oben) — bei den meisten
   Hosting-Paketen uneingeschränkt möglich, bei sehr restriktiven Setups ggf. beim Support
   nachfragen.
+- **Alles funktioniert außer "Lehrstoff" (kein "L"-Badge):** war bis v1.2.0 ein echter Bug —
+  der Proxy vergaß den `Authorization`-Header für `calendar-entry/detail` weiterzuleiten.
+  Mit v1.2.1 behoben (`webuntis-proxy.php` + `.htaccess`, siehe IDEEN.md B11 Fortsetzung).
+  Zeigt sich das trotz aktueller Version weiterhin, prüft ein Blick in die Browser-DevTools
+  (Netzwerk-Tab) den Status von `/WebUntis/api/rest/view/v2/calendar-entry/detail` — 404
+  bedeutet, der `Authorization`-Header kommt immer noch nicht beim echten Server an
+  (Apache-Konfigurationsfrage, nicht mehr im Code).
 
 ## Was das NICHT abdeckt
 

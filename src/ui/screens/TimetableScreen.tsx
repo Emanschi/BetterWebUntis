@@ -36,13 +36,29 @@ import { blockTitle, TimetableBlockCard } from '../components/TimetableBlockCard
 
 const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
-/** Geteilt zwischen der Ganztags-Zeile und dem Zeitraster einer Woche, damit Spalten exakt fluchten. */
-const WEEK_GRID_TEMPLATE_COLUMNS = '3.25rem repeat(5, minmax(0, 1fr))';
+/**
+ * Geteilt zwischen der Ganztags-Zeile und dem Zeitraster einer Woche, damit Spalten exakt
+ * fluchten. Breite der ersten Spalte kommt aus --bwu-time-axis-width (index.css), auf Mobil
+ * schmaler — siehe dort.
+ */
+const WEEK_GRID_TEMPLATE_COLUMNS = 'var(--bwu-time-axis-width) repeat(5, minmax(0, 1fr))';
 /** Tagesansicht: Zeitachse + genau eine Spalte. */
-const DAY_GRID_TEMPLATE_COLUMNS = '3.25rem minmax(0, 1fr)';
+const DAY_GRID_TEMPLATE_COLUMNS = 'var(--bwu-time-axis-width) minmax(0, 1fr)';
 
-/** Höhe je Minute im Zeitraster — 2px/Min. ergibt z. B. 90px für eine 45-Minuten-Stunde. */
-const PX_PER_MINUTE = 2;
+/**
+ * Höhe je Minute im Zeitraster, als CSS-Länge (nicht als Zahl) über --bwu-px-per-minute
+ * (index.css) — auf Mobil kleiner, damit eine ganze Woche ohne Scrollen aufs Display passt
+ * (Nutzerwunsch 2026-09-24). `minutes` kann aus einer Differenz stammen und rechnerisch
+ * negativ oder nicht ganzzahlig sein, `calc()` behandelt beides korrekt.
+ */
+function px(minutes: number): string {
+  return `calc(${minutes} * var(--bwu-px-per-minute))`;
+}
+
+/** Wie `px()`, aber nie kleiner als `minPx` — Mindesthöhe für sehr kurze Perioden. */
+function pxAtLeast(minutes: number, minPx: number): string {
+  return `max(${px(minutes)}, ${minPx}px)`;
+}
 
 /** Wie lange der Neon-Rahmen leuchtet, siehe index.css `.bwu-neon-highlight` (0.7s × 4 ≈ 2.8s Animation). */
 const HIGHLIGHT_DURATION_MS = 3200;
@@ -370,7 +386,7 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
 
       {query.isSuccess && (viewMode === 'week' || selectedDay !== undefined) && (
         <div className="overflow-x-auto pb-2">
-          <div className={viewMode === 'week' ? 'min-w-[820px]' : 'min-w-[320px]'}>
+          <div className={viewMode === 'week' ? 'w-full sm:min-w-[820px]' : 'min-w-[320px]'}>
             {visibleDays.some((d) => d.allDayBlocks.length > 0) && (
               // Eigene Zeile für ganztägige Einträge, mit demselben Spaltenraster wie das
               // Zeitraster darunter — so bleiben die Spalten pixelgenau ausgerichtet, auch
@@ -443,12 +459,12 @@ function TimeAxis({ bounds }: { bounds: TimeBounds }) {
   return (
     <div className="flex flex-col">
       <div className="h-5" aria-hidden="true" />
-      <div className="relative" style={{ height: totalMinutes * PX_PER_MINUTE }}>
+      <div className="relative" style={{ height: px(totalMinutes) }}>
         {timeBoundsHourMarks(bounds).map((minute) => (
           <div
             key={minute}
             className="absolute right-1 -translate-y-1/2 text-[10px] tabular-nums text-fg-muted"
-            style={{ top: (minute - bounds.startMinutes) * PX_PER_MINUTE }}
+            style={{ top: px(minute - bounds.startMinutes) }}
           >
             {formatWuTime(minutesToWuTime(minute))}
           </div>
@@ -484,12 +500,12 @@ function DayGridColumn({
       <div className="h-5 truncate text-xs font-semibold tracking-wide text-fg-muted uppercase">
         {label} · {formatWuDate(day.date, 'de-AT', { day: '2-digit', month: '2-digit' })}
       </div>
-      <div className="relative rounded-lg border border-border bg-bg" style={{ height: totalMinutes * PX_PER_MINUTE }}>
+      <div className="relative rounded-lg border border-border bg-bg" style={{ height: px(totalMinutes) }}>
         {timeBoundsHourMarks(bounds).map((minute) => (
           <div
             key={minute}
             className="absolute inset-x-0 border-t border-border/60"
-            style={{ top: (minute - bounds.startMinutes) * PX_PER_MINUTE }}
+            style={{ top: px(minute - bounds.startMinutes) }}
           />
         ))}
         {day.blocks.length === 0 && (
@@ -498,11 +514,8 @@ function DayGridColumn({
           </div>
         )}
         {day.blocks.map((block) => {
-          const top = (wuTimeToMinutes(block.startTime) - bounds.startMinutes) * PX_PER_MINUTE;
-          const height = Math.max(
-            (wuTimeToMinutes(block.endTime) - wuTimeToMinutes(block.startTime)) * PX_PER_MINUTE,
-            30,
-          );
+          const top = px(wuTimeToMinutes(block.startTime) - bounds.startMinutes);
+          const height = pxAtLeast(wuTimeToMinutes(block.endTime) - wuTimeToMinutes(block.startTime), 30);
           const key = block.periodIds.join('-');
           return (
             <div key={key} id={`bwu-block-${key}`} className="absolute inset-x-0.5" style={{ top, height }}>

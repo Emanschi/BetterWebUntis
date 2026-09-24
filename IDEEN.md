@@ -546,6 +546,102 @@ Apache+PHP-Host deployt (derselbe Vorbehalt wie schon bei B1/B9 — kein `php -l
 Umgebung verfügbar); ob `mobile.webuntis.com` für ALLE WebUntis-Instanzen weltweit
 (nicht nur österreichische Schulen) dieselbe Antwortform liefert, ist ungemessen.
 
+**Fortsetzung, direkt im Anschluss (2026-09-24) — erster echter Deploy-Test, ein Bug
+gefunden: "Lehrplan wird nie detected, nur die Infos, auf der gehosteten Version."**
+Genau der oben offen gelassene Vorbehalt (Proxy nie gegen einen echten Server getestet)
+schlug sofort zu. Diagnose ohne Zugriff auf den echten Server, allein aus dem Symptom und
+einer erneuten Code-Durchsicht von `webuntis-proxy.php`: das Info-Badge kommt direkt aus
+den ohnehin geladenen Stundenplan-Daten (`jsonrpc.do`, funktioniert), Lehrstoff dagegen
+über zwei Aufrufe — `/api/token/new` (nur Cookie nötig) dann `calendar-entry/detail` MIT
+`Authorization: Bearer <token>` (siehe B8 Fortsetzung). Der Proxy baute seine
+Weiterleitungs-Header aber schon immer nur aus `Accept`, `Cookie` und `Content-Type`
+zusammen — **der `Authorization`-Header wurde nie gelesen, nie weitergeleitet.** Ohne ihn
+antwortet der echte Server mit HTTP 404 (gemessenes Verhalten, siehe TESTING.md); die App
+wertet das als Query-Fehler, nicht als "kein Lehrstoff", und zeigt deshalb konsequent gar
+kein Badge — exakt das gemeldete Symptom. Bestand unverändert seit dem allerersten
+Proxy-Entwurf (v1.1.0), fiel nur nie auf, weil bis zu diesem Deploy niemand `webuntis-
+proxy.php` gegen einen echten Server ausführen konnte.
+
+**Zweite, unabhängige Fehlerquelle einkalkuliert:** Apache reicht den `Authorization`-Header
+vielen PHP-Konfigurationen (mod_php, teils PHP-FPM/CGI) grundsätzlich NICHT automatisch in
+`$_SERVER['HTTP_AUTHORIZATION']` durch — eine seit Jahren bekannte, hostabhängige
+PHP/Apache-Eigenheit, unabhängig von diesem Code. Ohne Live-Zugriff auf den World4You-Server
+war nicht zu klären, ob das hier zusätzlich zuschlägt — deshalb beide Ebenen abgesichert statt
+nur eine zu raten.
+
+**Fix:**
+- `deploy/webuntis-proxy.php` — neue `incomingAuthorizationHeader()`: prüft der Reihe nach
+  `$_SERVER['HTTP_AUTHORIZATION']`, `$_SERVER['REDIRECT_HTTP_AUTHORIZATION']` (Apache legt
+  Header bei einem internen Rewrite manchmal hier ab), `apache_request_headers()`,
+  `getallheaders()` — der gefundene Wert wird jetzt als `Authorization`-Header an den echten
+  Server weitergereicht.
+- `deploy/.htaccess` — zusätzlich eine `RewriteCond`/`RewriteRule`, die den Header explizit
+  in `HTTP_AUTHORIZATION` erzwingt, bevor die eigentliche Proxy-Weiterleitung greift (Standard-
+  Workaround für genau diese Apache-Eigenheit).
+- `deploy/README.md` — neuer Stolperstein-Eintrag mit Diagnose-Anleitung (Netzwerk-Tab, HTTP-
+  Status von `calendar-entry/detail` prüfen), falls es trotzdem noch nicht funktioniert.
+
+**Ehrlich einzuordnen:** dies ist eine sehr wahrscheinliche, aus Code + Symptom sauber
+hergeleitete Diagnose, aber **nicht** durch einen Server-Log/eine Netzwerk-Aufzeichnung vom
+echten Deploy bestätigt (kein Zugriff auf den World4You-Server). Nutzer sollte nach dem
+Hochladen der zwei geänderten Dateien erneut prüfen, ob das "L"-Badge erscheint.
+
+### B12 — PWA-Manifest ("Zum Startbildschirm hinzufügen") + Credit-Link EmanschiGames (Nutzerwunsch 2026-09-24)
+
+**PWA-Installierbarkeit:** `public/manifest.webmanifest` (Name, Icons, `display: standalone`,
+Theme-/Background-Color) + zugehörige `<link>`/`<meta>`-Tags in `index.html`. Icons neu
+erzeugt (`public/icons/`, SVG-Quelle + PNG in 192/512/512-maskable/apple-touch-icon,
+per `rsvg-convert`) — schlichtes 2×3-Kachelraster in der Akzentfarbe (`#2f6feb`), angelehnt
+an die echten Stundenplan-Karten. iOS liest den Manifest-Standard nur teilweise, deshalb
+zusätzlich die eigenen `apple-touch-icon`/`apple-mobile-web-app-*`-Tags gesetzt. `public/`
+war vorher leer/nicht vorhanden — Vite kopiert seinen Inhalt unverändert in den Build-Output.
+
+**Credit-Link:** neue `<Attribution />`-Komponente (`ui/components/Attribution.tsx`, fest auf
+`https://emanschigames.com`, `target="_blank" rel="noopener noreferrer"`) — einmal unter der
+Headline in `LoginScreen.tsx`, einmal als Footer in `AppShell.tsx` (dadurch auf jedem
+angemeldeten Screen sichtbar, nicht nur Login). Text bewusst wörtlich wie vom Nutzer
+vorgegeben ("Created by EmanschiGames", Englisch, trotz sonst durchgehend deutscher UI —
+als Branding-Zeile absichtlich so übernommen).
+
+Manuell verifiziert (Mock-Server, Dark Mode): Link erscheint an beiden Stellen, `href` zeigt
+korrekt auf `https://emanschigames.com` (per Accessibility-Tree geprüft), Footer sichtbar
+unter dem Stundenplan nach Login. Kein neuer Testfall (statischer Link ohne Logik) — bestehende
+LoginScreen-/App-Tests bleiben unverändert grün.
+
+### B13 — Wochenansicht auf dem Handy ohne Scrollen (Nutzerwunsch 2026-09-24)
+
+**Vorher:** die Wochenansicht erzwang eine Mindestbreite von 820px (`min-w-[820px]`) und eine
+feste Zeitraster-Dichte von 2px/Minute — auf einem Handy-Bildschirm bedeutete das horizontales
+UND vertikales Scrollen, um die ganze Woche zu sehen.
+
+**Umgesetzt, responsiv statt einer eigenen mobilen Extra-Ansicht:**
+- Neue CSS-Variablen `--bwu-px-per-minute` (Zeitraster-Dichte) und `--bwu-time-axis-width`
+  (Breite der Uhrzeit-Spalte) in `index.css`, per `@media (max-width: 640px)` kleiner
+  überschrieben (2px→1px/Minute, 3.25rem→2.25rem) — dieselbe Technik wie die bestehenden
+  Theme-Tokens (`--bwu-bg` usw.), nur für Layout statt Farbe.
+- `TimetableScreen.tsx`: die Höhen-/Positionsberechnungen im Zeitraster (`TimeAxis`,
+  `DayGridColumn`, Block-Positionierung) laufen jetzt über `calc()`-Strings (`px()`/
+  `pxAtLeast()`-Hilfsfunktionen) statt fester JS-Multiplikation mit einer Konstante — dieselbe
+  Zahl, aber die tatsächliche Pixel-Dichte kommt zur Laufzeit aus der CSS-Variable.
+- Die erzwungene `min-w-[820px]` der Wochenansicht gilt jetzt erst ab `sm:` (Tailwind, 640px)
+  — darunter darf das Grid (`minmax(0, 1fr)`-Spalten) auf die tatsächliche Bildschirmbreite
+  schrumpfen, keine horizontale Scrollbar mehr auf dem Handy.
+- `TimetableBlockCard.tsx` selbst unverändert — der bereits vorhandene `dense`-Modus (siehe
+  B10) reicht bei der kleineren Zeilenhöhe weiterhin aus, keine dritte Kartenvariante nötig.
+
+**Live am Mock-Server verifiziert** (Browser-Tool, 375×812, iPhone-Breite): komplette Woche
+(Mo–Fr, 08:00–15:00) passt ohne jedes Scrollen auf den Bildschirm, Karten bleiben lesbar
+(Fach, Zeit, gekürzter Raum), Badges (i/L/Vertretung) weiterhin sichtbar. Tagesansicht auf
+Mobil ebenfalls geprüft, unverändert gut lesbar (mehr Platz pro Spalte). Desktop-Ansicht
+(>640px) bewusst unverändert gegengeprüft — alte Dichte/erzwungene Breite bleiben dort exakt
+wie vorher. Kein neuer automatisierter Test (reines CSS/Layout, keine neue Logik) — bestehende
+296 TimetableScreen-Tests bleiben unverändert grün, prüfen aber keine echten Pixelwerte
+(siehe Code-Review vor der Änderung), sondern nur Struktur/Verhalten.
+
+**Ungemessen:** wie sich ein deutlich längerer Schultag (z. B. bis 17:00, 540 statt ~420
+Minuten wie in den Mock-Daten) auf sehr kleinen/älteren Handys (<375px Breite) auswirkt —
+plausibel noch ohne Scrollen, aber nicht mit echten Daten dieser Länge getestet.
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.

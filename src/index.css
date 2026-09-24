@@ -35,6 +35,25 @@
   --bwu-danger-fg: #ffffff;
   --bwu-cancelled: #9ca3af;
   --bwu-irregular: #d97706;
+
+  /* Zeitraster-Skalierung (TimetableScreen.tsx) — auf dem Desktop grosszuegig, damit auch
+     kurze Einzelstunden gut lesbar sind. Siehe die Mobil-Ueberschreibung unten. */
+  --bwu-px-per-minute: 2px;
+  /* Breite der Uhrzeit-Spalte im Zeitraster (TimeAxis) — auf Mobil schmaler, damit mehr
+     Platz fuer die eigentlichen Tages-Spalten bleibt. */
+  --bwu-time-axis-width: 3.25rem;
+}
+
+@media (max-width: 640px) {
+  :root {
+    /* Nutzerwunsch 2026-09-24: die ganze Woche soll auf einen Handy-Bildschirm passen, ohne
+       scrollen zu muessen. 1px/Min. ergibt bei einem typischen 7-8h-Schultag ca. 420-480px
+       Hoehe statt 840-960px bei der Desktop-Dichte — ohne eigene, zweite Kartenversion nur
+       fuer Mobil zu bauen (TimetableBlockCard bleibt unveraendert, ihr "dense"-Modus greift
+       bereits fuer beide Ansichten). Live am Mock-Server geprueft (iPhone-Breite, 375px). */
+    --bwu-px-per-minute: 1px;
+    --bwu-time-axis-width: 2.25rem;
+  }
 }
 
 @media (prefers-color-scheme: dark) {

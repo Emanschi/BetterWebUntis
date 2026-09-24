@@ -1,5 +1,6 @@
 import { NavLink, Navigate, Outlet } from 'react-router-dom';
 import { useSessionStore } from '../state/sessionStore';
+import { Attribution } from './components/Attribution';
 import { Button } from './components/Button';
 import { ThemeToggle } from './components/ThemeToggle';
 
@@ -53,6 +54,10 @@ export function AppShell() {
       <main className="flex-1 p-4">
         <Outlet />
       </main>
+
+      <footer className="border-t border-border px-4 py-3 text-center text-xs">
+        <Attribution />
+      </footer>
     </div>
   );
 }

@@ -63,7 +63,16 @@ src/ui/       AppShell, router.tsx (HashRouter), screens/, components/
 src/mock/     Mock-Server + Fake-Schule „Mock-HTL"; rpcHandler.ts wird von server.ts (Node)
               UND msw/handlers.ts (Tests) geteilt — eine Fachlogik, zwei Transporte
 scripts/      smoke-test.ts (echter Server), mock-server.ts
+public/       PWA-Manifest + Icons (Vite kopiert unverändert in den Build-Output, siehe
+              index.html) — seit B12, IDEEN.md
 ```
+
+**Responsive Layout-Werte über CSS-Variablen, nicht über JS-Viewport-Checks.** Siehe
+`index.css`: `--bwu-px-per-minute`/`--bwu-time-axis-width` (Zeitraster-Dichte, B13
+IDEEN.md), per `@media (max-width: 640px)` überschrieben — dieselbe Technik wie die
+Theme-Tokens (`--bwu-bg` usw.). `TimetableScreen.tsx` baut daraus `calc()`-Strings
+(`px()`/`pxAtLeast()`) statt fester JS-Multiplikation. Für einen neuen responsiven Wert:
+diesem Muster folgen statt `window.innerWidth`/`matchMedia` in Komponenten abzufragen.
 
 **Harte Regel: `ui/` und `domain/` sprechen nie direkt mit dem Netz, nur über `src/api`.**
 
@@ -127,6 +136,16 @@ weiterleitet (sonst offener Proxy, SSRF). Ein neuer undokumentierter Endpunkt un
 wie bei der Schulsuche) als eigene feste Zone dort. Der Dev-Proxy (`vite.config.ts`)
 ignoriert diesen Header bewusst — er bleibt immer auf die eine in `VITE_WEBUNTIS_SERVER`
 konfigurierte Schule fest, siehe die nächste Zeile.
+
+**`deploy/webuntis-proxy.php` muss den `Authorization`-Header selbst weiterreichen — tut es
+nicht automatisch.** Bug bis v1.2.0 (IDEEN.md B11 Fortsetzung): der Proxy baute seine
+Weiterleitungs-Header nur aus `Accept`/`Cookie`/`Content-Type` zusammen, der Bearer-Token
+für `calendar-entry/detail` (getRestBearer(), siehe oben) ging verloren → Lehrstoff nie
+gefunden, obwohl alles andere lief. Zusätzliche Falle: Apache reicht `Authorization` vielen
+PHP-Setups gar nicht erst in `$_SERVER['HTTP_AUTHORIZATION']` durch — deshalb liest
+`incomingAuthorizationHeader()` mehrere Quellen, UND `deploy/.htaccess` erzwingt den Header
+zusätzlich per `RewriteRule`. Bei jedem neuen Endpunkt, der eigene Auth-Header braucht (nicht
+nur Cookie): hier drandenken, nicht nur an `ALLOWED_PATHS`.
 
 **`vite.config.ts`-Fehler bei fehlendem `VITE_WEBUNTIS_SERVER` nur für `npm run dev`, nicht
 für `npm run mock`/`npm run smoke`/`npm run build`.** `vite-node` (beide erstgenannten
