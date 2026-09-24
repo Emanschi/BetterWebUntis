@@ -43,6 +43,20 @@ Der Proxy hält **keinen** Zustand: er leitet den POST-Body an `jsonrpc.do` weit
 
 *Erledigt:* Der Proxy ist nachweislich zwingend — der echte Login-Test (M10, 2026-09-16) zeigte sofort ein Cookie-Path-Problem, das erst durch eine Proxy-Anpassung (Pfad exakt `/WebUntis`, siehe TESTING.md) behoben wurde. Die deprecated `;jsessionid=`-Variante ist damit ohnehin hinfällig, ein Test darauf entfällt.
 
+**Produktions-Proxy gebaut, 2026-09-24 (Nutzerwunsch: Deploy-Anleitung für die eigene
+World4You-Subdomain).** `deploy/webuntis-proxy.php` + `deploy/.htaccess` + `deploy/README.md`
+— deckt alle fünf tatsächlich genutzten Pfade ab (jsonrpc.do + die vier REST-Endpunkte aus
+B3/B3b/B8), nicht nur jsonrpc.do wie in PLAN.md R8 ursprünglich als Lücke vermerkt. Feste
+Positivliste exakter Pfade (kein Prefix-Match) — ein unbekannter Pfad wird mit 404
+abgelehnt, damit das Skript kein offener Proxy für beliebige Ziele werden kann
+(SSRF-Vermeidung). `WEBUNTIS_HOST` fest einprogrammiert, keine Datenbank, keine
+Nutzerverwaltung, keine Logs mit Zugangsdaten — wie hier seit 2026-09-10 geplant.
+
+**Noch nicht real getestet:** kein Zugriff auf einen echten PHP-Server in dieser Umgebung,
+auch kein `php -l` verfügbar (nur Klammern-Balance manuell geprüft). Der Nutzer muss das
+einmal selbst gegen seine World4You-Subdomain verifizieren (siehe `deploy/README.md`
+"Testen").
+
 ### B2 – ICS-Abo-Feed — **entschieden: beides, in dieser Reihenfolge**
 1. **M8 — ICS-Datei-Export** (rein clientseitig, kein Server, keine gespeicherten Zugangsdaten). Prüfungen aus `getExams` je `examTypeId` einsammeln, als `.ics` herunterladen.
 2. **M11 — Abo-Feed auf World4you.** Ein Kalenderabo wird ohne Nutzerinteraktion abgerufen, also *muss* serverseitig gegen WebUntis authentifiziert werden. Das wird bewusst isoliert gebaut, statt es zu verstecken:

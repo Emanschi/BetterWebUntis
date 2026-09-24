@@ -74,6 +74,13 @@ export function TimetableBlockCard({
   // ein halbtransparentes Overlay in der Gegenrichtung der Textfarbe funktioniert auf
   // jeder Hintergrundfarbe.
   const pillStyle = colors !== undefined ? { backgroundColor: colors.foreground === '#ffffff' ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.4)' } : undefined;
+  // Nutzerwunsch 2026-09-24: sichtbarer Kartenrand, damit direkt angrenzende Karten
+  // (z. B. zwei Fächer mit ähnlicher generierter Farbe) nicht optisch zusammenlaufen.
+  // Dieselbe Kontrast-Technik wie pillStyle (dunkler Rand auf hellem Text, heller Rand auf
+  // dunklem Text), statt eines fixen neutralen Tons — funktioniert dadurch auf jeder
+  // Fachfarbe, nicht nur auf den zufällig passenden.
+  const cardBorderColor =
+    colors !== undefined ? (colors.foreground === '#ffffff' ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.4)') : undefined;
 
   return (
     <button
@@ -81,12 +88,20 @@ export function TimetableBlockCard({
       title={tooltipText === '' ? undefined : tooltipText}
       onClick={() => onOpen?.(block)}
       aria-haspopup="dialog"
-      className={`flex h-full w-full flex-col overflow-hidden rounded-lg text-left transition-shadow ${
+      className={`flex h-full w-full flex-col overflow-hidden rounded-lg border text-left transition-shadow ${
         dense ? 'gap-0.5 p-1.5 text-[11px] leading-tight' : 'gap-1 p-2 text-xs'
-      } ${cancelled ? 'border border-border bg-surface-hover opacity-70' : 'shadow-sm hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent'} ${
+      } ${cancelled ? 'border-border bg-surface-hover opacity-70' : 'shadow-sm hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent'} ${
         highlighted ? 'bwu-neon-highlight' : ''
       }`}
-      style={cancelled ? undefined : { backgroundColor: colors?.background ?? 'var(--bwu-surface-hover)', color: colors?.foreground ?? 'var(--bwu-fg)' }}
+      style={
+        cancelled
+          ? undefined
+          : {
+              backgroundColor: colors?.background ?? 'var(--bwu-surface-hover)',
+              color: colors?.foreground ?? 'var(--bwu-fg)',
+              borderColor: cardBorderColor ?? 'var(--bwu-border)',
+            }
+      }
     >
       <div className="flex items-start justify-between gap-2">
         <span className={`font-semibold ${cancelled ? 'text-fg line-through' : ''}`}>{blockTitle(block)}</span>

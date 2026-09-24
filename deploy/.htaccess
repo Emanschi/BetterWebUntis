@@ -1,0 +1,10 @@
+# Leitet alles unter /WebUntis/* an den PHP-Proxy weiter (siehe webuntis-proxy.php).
+# Alles andere (index.html, /assets/*.js, /assets/*.css) wird ganz normal als Datei
+# ausgeliefert -- die App ist eine HashRouter-SPA (#/timetable statt /timetable), braucht
+# also KEINE eigene Fallback-Regel fuer tiefe Links.
+#
+# Diese Datei gehoert in den Web-Root der Subdomain, direkt neben index.html und
+# webuntis-proxy.php (siehe deploy/README.md).
+
+RewriteEngine On
+RewriteRule ^WebUntis/.*$ webuntis-proxy.php [L,QSA]

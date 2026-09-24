@@ -95,6 +95,11 @@ npm run typecheck  # TypeScript im strict-Modus
 npm run build      # Produktions-Build
 ```
 
+## Eigenes Hosting
+
+Die Web-App lässt sich auf jedem Apache+PHP-Webspace (z. B. World4You) hosten — Anleitung
+und der dafür nötige kleine Proxy liegen in [deploy/](deploy/README.md).
+
 Der komplette Entwicklungsstand, alle Architekturentscheidungen und Messungen gegen den
 echten Server stehen in drei laufend gepflegten Dokumenten:
 
