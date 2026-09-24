@@ -405,6 +405,42 @@ nachvollzogen (Light/Dark): Badge fehlt vor dem Öffnen, erscheint sogar schon w
 Modal noch offen ist (React-Re-Render, kein Schließen nötig), bleibt danach bestehen; BSP
 bleibt nach dem Öffnen weiterhin ohne Badge.
 
+**Dritte Runde, direkt im Anschluss (2026-09-24) — Rückabwicklung war ein Missverständnis,
+Vorabladung wieder eingebaut.** Der Nutzer hatte in der vorigen Runde tatsächlich das
+Gegenteil gemeint: die Vorabladung soll BLEIBEN, nicht raus — sie hatte sich real (Screenshot
+vom echten Konto) so verhalten, ALS würde sie nicht vor dem Öffnen laden. Klargestellt: "es
+soll vorher schon sichtbar sein, ohne dass man es öffnen muss — das war ja der Fehler
+vorher."
+
+**Wahrscheinliche Ursache des "wirkt wie nur-pro-Klick"-Eindrucks:** kein Bug im engeren Sinn,
+sondern Geschwindigkeit. Der Mock antwortet lokal quasi sofort, unabhängig von der
+Aufrufreihenfolge — das verschleiert, dass gegen den ECHTEN Server alle ~30
+`calendar-entry-detail`-Aufrufe einer Woche sich dieselbe Drosselung teilen (`api/client.ts`,
+`minRequestGapMs`, geteilt mit allen anderen API-Aufrufen) und dadurch NACHEINANDER laufen.
+Bei einer festen "Montag zuerst"-Reihenfolge kann der gerade interessante Tag (z. B. ein über
+"Prüfungen" angesprungener Freitag) weit hinten in der Warteschlange stehen — bis dessen
+Karte ihr Badge bekommt, vergehen u. U. mehrere Sekunden, in denen es aussieht, als würde
+gar nichts vorab laden. Nicht direkt gemessen (kein Zugriff auf den echten Server), aber
+die einzige Erklärung, die zum gemeldeten Symptom UND zum vorher tatsächlich funktionierenden
+Mock-Verhalten passt.
+
+**Umgesetzt:** Vorabladung (`useQueries` über die ganze sichtbare Woche) wieder eingebaut,
+`hasRestText()`-Fix bleibt selbstverständlich erhalten. Neu dazu: `domain/timetable.ts`
+`prioritizeByDate()` — reine, isoliert getestete Sortierfunktion, die den gerade sichtbaren
+Tag (`selectedDate`) an den Anfang der Abfrage-Reihenfolge stellt, den Rest der Woche
+unverändert dahinter. Dadurch bekommt der relevante Tag sein Badge zuerst, unabhängig davon,
+auf welchem Wochentag er liegt. 4 neue Tests für `prioritizeByDate` (isoliert), die beiden
+TimetableScreen-Tests wieder auf "Badge vor dem Öffnen sichtbar" zurückgesetzt.
+
+**Bewusst NICHT gemacht:** echte Nebenläufigkeit (mehrere `calendar-entry-detail`-Aufrufe
+gleichzeitig statt nacheinander) — hätte die Gesamtzeit für eine ganze Woche zusätzlich
+verkürzt, aber ist gegen den echten, undokumentierten Endpunkt ungemessen, ob das ohne
+Rate-Limit-Probleme funktioniert. Die Priorisierung allein verbessert nur, WELCHER Tag zuerst
+fertig ist, nicht wie lange die ganze Woche insgesamt braucht. Falls das Priorisieren allein
+gegen den echten Server nicht ausreicht (weiterhin spürbar langsam für den relevanten Tag),
+wäre kontrollierte Nebenläufigkeit (z. B. 3–4 Aufrufe gleichzeitig) der nächste Schritt — aber
+erst nach einem erneuten Test gegen den echten Server, nicht auf Verdacht.
+
 ## C) Feature-Ideen (Backlog, nicht beauftragt)
 
 - **Stundenplan-Diff**: Änderungen seit dem letzten Besuch hervorheben, basierend auf `getLatestImportTime`.

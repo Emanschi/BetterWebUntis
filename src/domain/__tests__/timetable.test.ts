@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildWeekGrid, computeTimeBounds, DEFAULT_TIME_BOUNDS, mergeSubstitutions, timeBoundsHourMarks } from '../timetable';
+import { buildWeekGrid, computeTimeBounds, DEFAULT_TIME_BOUNDS, mergeSubstitutions, prioritizeByDate, timeBoundsHourMarks } from '../timetable';
 import type { Period, Substitution } from '../../api/types';
 
 function period(overrides: Partial<Period> & Pick<Period, 'id' | 'date' | 'startTime' | 'endTime'>): Period {
@@ -250,5 +250,26 @@ describe('timeBoundsHourMarks', () => {
 
   it('liefert genau eine Markierung, wenn Start und Ende gleich sind', () => {
     expect(timeBoundsHourMarks({ startMinutes: 480, endMinutes: 480 })).toEqual([480]);
+  });
+});
+
+describe('prioritizeByDate', () => {
+  it('stellt Elemente mit dem priorisierten Datum an den Anfang', () => {
+    const items = [{ date: 1 }, { date: 2 }, { date: 3 }];
+    expect(prioritizeByDate(items, 3)).toEqual([{ date: 3 }, { date: 1 }, { date: 2 }]);
+  });
+
+  it('behält die relative Reihenfolge innerhalb von priorisiert/Rest bei (stabil)', () => {
+    const items = [{ date: 1, id: 'a' }, { date: 2, id: 'b' }, { date: 1, id: 'c' }, { date: 2, id: 'd' }];
+    expect(prioritizeByDate(items, 2).map((i) => i.id)).toEqual(['b', 'd', 'a', 'c']);
+  });
+
+  it('lässt die Reihenfolge unverändert, wenn kein Element passt', () => {
+    const items = [{ date: 1 }, { date: 2 }];
+    expect(prioritizeByDate(items, 99)).toEqual(items);
+  });
+
+  it('lässt eine leere Liste unverändert', () => {
+    expect(prioritizeByDate([], 1)).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSessionStore } from '../../state/sessionStore';
 import { api, restApi } from '../../api/index';
@@ -19,6 +19,7 @@ import {
   buildWeekGrid,
   computeTimeBounds,
   mergeSubstitutions,
+  prioritizeByDate,
   timeBoundsHourMarks,
   type TimeBounds,
   type TimetableBlock,
@@ -203,22 +204,62 @@ export function TimetableScreen({ element: elementProp, title = 'Stundenplan' }:
   const grid = useMemo(() => buildWeekGrid(query.data ?? [], weekStart), [query.data, weekStart]);
   const weekDays = useMemo(() => grid.slice(0, 5), [grid]);
 
-  // "L"-Badge auf der Karte (Nutzerwunsch 2026-09-24), zeigt Lehrstoff vorhanden an.
+  // "L"-Badge auf der Karte (Nutzerwunsch 2026-09-24): zeigt, ob eine Stunde Lehrstoff hat,
+  // OHNE sie erst zu öffnen — dafür muss `teachingContent` für die ganze sichtbare Woche
+  // vorab geladen werden, nicht erst pro Klick wie B8 es ursprünglich vorsah. Zwischenzeitlich
+  // (2026-09-24, zweite Runde) auf "nur beim Öffnen" zurückgebaut, dann auf ausdrücklichen
+  // Nutzerwunsch (dritte Runde, Screenshot mit gleichzeitig Zusatzinfo UND Lehrstoff) wieder
+  // auf Vorabladung umgestellt — das Badge soll sichtbar sein, OHNE dass man erst öffnen muss.
   //
-  // Erster Versuch war eine Vorabladung der ganzen sichtbaren Woche (~30 REST-Aufrufe pro
-  // Ansicht) — auf Nutzerwunsch wieder verworfen (2026-09-24, zweite Runde): `teachingContent`
-  // wird nach wie vor NUR beim tatsächlichen Öffnen einer Periode geladen, genau wie B8 es
-  // ursprünglich vorsah ("wie die Original-App, nur pro Klick"). Das Badge selbst merkt sich
-  // deshalb pro Sitzung, welche Perioden beim Öffnen tatsächlich Lehrstoff hatten — es
-  // erscheint also erst NACH dem ersten Öffnen einer Periode, bleibt danach aber (für diese
-  // Sitzung) sichtbar, ohne erneut anzufragen.
-  const [blocksWithTeachingContent, setBlocksWithTeachingContent] = useState<ReadonlySet<string>>(new Set());
-  useEffect(() => {
-    if (openBlock === null) return;
-    if (!restApi.hasRestText(calendarDetailQuery.data?.teachingContent)) return;
-    const key = openBlock.periodIds.join('-');
-    setBlocksWithTeachingContent((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
-  }, [openBlock, calendarDetailQuery.data]);
+  // Priorisierung: der Tag, den man gerade ansieht (`selectedDate` — Default "heute", oder
+  // der Tag, zu dem ein Prüfungs-Klick gesprungen ist), wird ZUERST abgefragt, der Rest der
+  // Woche danach in normaler Reihenfolge. Grund: gegen den echten Server teilt sich jede
+  // dieser Anfragen die Drosselung mit allen anderen API-Aufrufen (siehe api/client.ts,
+  // `minRequestGapMs`) — eine ganze Woche (~30 Perioden) kann dadurch mehrere Sekunden
+  // dauern, bevor die letzte Karte ihr Badge bekommt. Ohne Priorisierung stünde der gerade
+  // relevante Tag u. U. ganz hinten in der Warteschlange (Montag-zuerst), was sich anfühlt,
+  // als würde das Badge gar nicht vor dem Öffnen erscheinen — genau das war der gemeldete
+  // Eindruck. Echte Nebenläufigkeit (mehrere Anfragen gleichzeitig statt nacheinander) wurde
+  // bewusst NICHT eingebaut: ungemessen, ob der echte Server das ohne Rate-Limit verträgt.
+  const teachingContentBlocks = useMemo(() => {
+    if (isForeignElement) return [];
+    return prioritizeByDate(weekDays, selectedDate).flatMap((day) => day.blocks);
+  }, [weekDays, isForeignElement, selectedDate]);
+  const teachingContentResults = useQueries({
+    queries: teachingContentBlocks.map((block) => ({
+      queryKey: ['calendarEntryDetail', personId, personType, block.date, block.startTime, block.endTime],
+      enabled: client !== null && personId !== undefined && personType !== undefined,
+      // Fehlerformat ungemessen (wie calendarDetailQuery) — kein Retry, damit ein einzelner
+      // Fehlschlag nicht die ganze Woche wiederholt nachfragt.
+      retry: false,
+      queryFn: async () => {
+        if (client === null || personId === undefined || personType === undefined) {
+          throw new Error('Keine aktive Sitzung.');
+        }
+        // React Query verbietet `undefined` als Query-Ergebnis, getCalendarEntryDetailRest()
+        // liefert das aber bei keinem Treffer (der Normalfall fuer die meisten Perioden).
+        const result = await restApi.getCalendarEntryDetailRest(client, {
+          elementId: personId,
+          elementType: personType,
+          startDateTime: wuDateTimeToIsoLocal(block.date, block.startTime),
+          endDateTime: wuDateTimeToIsoLocal(block.date, block.endTime),
+        });
+        return result ?? null;
+      },
+    })),
+  });
+  const blocksWithTeachingContent = useMemo(() => {
+    const keys = new Set<string>();
+    teachingContentBlocks.forEach((block, index) => {
+      // hasRestText(), nicht "!== undefined": der Server sendet bei keinem Lehrstoff
+      // explizit `null`, nicht nur ein fehlendes Feld (siehe RestCalendarEntryDetail-
+      // Kommentar) — Bug, gemeldet 2026-09-24: "L"-Badge erschien trotzdem.
+      if (restApi.hasRestText(teachingContentResults[index]?.data?.teachingContent)) {
+        keys.add(block.periodIds.join('-'));
+      }
+    });
+    return keys;
+  }, [teachingContentBlocks, teachingContentResults]);
   const selectedDay = useMemo(() => grid.find((d) => d.date === selectedDate), [grid, selectedDate]);
   const visibleDays = viewMode === 'week' ? weekDays : selectedDay !== undefined ? [selectedDay] : [];
   const bounds = useMemo(() => computeTimeBounds(visibleDays), [visibleDays]);

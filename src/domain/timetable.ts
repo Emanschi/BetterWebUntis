@@ -249,3 +249,24 @@ export function timeBoundsHourMarks(bounds: TimeBounds): number[] {
   for (let m = bounds.startMinutes; m <= bounds.endMinutes; m += 60) marks.push(m);
   return marks;
 }
+
+// ---------------------------------------------------------------------------
+// Priorisierung fuer Hintergrund-Vorabladungen (z. B. "Lehrstoff"-Badge,
+// TimetableScreen.tsx) — reine Sortierlogik, ohne Netzzugriff.
+// ---------------------------------------------------------------------------
+
+/**
+ * Stellt die Elemente mit `date === priorityDate` an den Anfang, der Rest bleibt in
+ * unveränderter Reihenfolge dahinter. Für Hintergrund-Vorabladungen, die sich eine
+ * Drosselung mit anderen Anfragen teilen (siehe `api/client.ts` `minRequestGapMs`): der
+ * gerade sichtbare Tag soll zuerst fertig sein, nicht erst nachdem eine feste
+ * Montag-zuerst-Reihenfolge ihn erreicht hat (Nutzerwunsch 2026-09-24, dritte Runde — ohne
+ * Priorisierung wirkte die Vorabladung gegen den echten Server, als würde sie gar nicht vor
+ * dem Öffnen laden).
+ */
+export function prioritizeByDate<T extends { date: WuDate }>(items: readonly T[], priorityDate: WuDate): T[] {
+  const prioritized: T[] = [];
+  const rest: T[] = [];
+  for (const item of items) (item.date === priorityDate ? prioritized : rest).push(item);
+  return [...prioritized, ...rest];
+}
